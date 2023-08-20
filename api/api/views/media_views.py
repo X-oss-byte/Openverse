@@ -1,4 +1,5 @@
 import logging
+from typing import Literal
 
 from rest_framework import status
 from rest_framework.decorators import action
@@ -99,6 +100,59 @@ class MediaViewSet(ReadOnlyModelViewSet):
         return Response(serializer.data)
 
     def list(self, request, *_, **__):
+        return self.get_media_results(request, "search")
+
+    def collection(self, request, tag, source, creator, *_, **__):
+        if tag:
+            collection_params = {"tag": tag}
+        elif creator:
+            collection_params = {"creator": creator, "source": source}
+        else:
+            collection_params = {"source": source}
+        return self.get_media_results(request, "collection", collection_params)
+
+    @action(detail=False, methods=["get"], url_path="tag/(?P<tag>[^/.]+)")
+    def tag_collection(self, request, tag, *_, **__):
+        """
+        Retrieve a collection of media tagged with specific tag.
+
+        The media in the collection will be ranked according to the popularity at
+        the source and also boosted by `unstable__authority` parameter.
+        """
+        return self.collection(request, tag, None, None)
+
+    @action(detail=False, methods=["get"], url_path="source/(?P<source>[^/.]+)")
+    def source_collection(self, request, source, *_, **__):
+        """
+        Retrieve a collection of media from a specific source.
+
+        The media in the collection will be sorted by the order in which they were
+        added to Openverse.
+        """
+        return self.collection(request, None, source, None)
+
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="source/(?P<source>[^/.]+)/creator/(?P<creator>[^/.]+)",
+    )
+    def creator_collection(self, request, source, creator):
+        """
+        Retrieve a collection of media from a specific creator at the specified source.
+
+        The media in the collection will be sorted by the order in which they were
+        added to Openverse.
+        """
+        return self.collection(request, None, source, creator)
+
+    # Common functionality for search and collection views
+
+    def get_media_results(
+        self,
+        request,
+        strategy: Literal["search", "collection"],
+        collection_params: dict[str, str] = None,
+    ):
         params = self._get_request_serializer(request)
 
         page_size = self.paginator.page_size = params.data["page_size"]
@@ -117,7 +171,13 @@ class MediaViewSet(ReadOnlyModelViewSet):
             exact_index = False
 
         try:
-            results, num_pages, num_results, search_context = search_controller.search(
+            (
+                results,
+                num_pages,
+                num_results,
+                search_context,
+            ) = search_controller.query_media(
+                strategy,
                 params,
                 search_index,
                 exact_index,
@@ -125,6 +185,7 @@ class MediaViewSet(ReadOnlyModelViewSet):
                 hashed_ip,
                 filter_dead,
                 page,
+                collection_params,
             )
             self.paginator.page_count = num_pages
             self.paginator.result_count = num_results

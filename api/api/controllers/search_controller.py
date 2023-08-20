@@ -4,7 +4,7 @@ import logging as log
 import pprint
 from itertools import accumulate
 from math import ceil
-from typing import Literal
+from typing import Literal, cast
 
 from django.conf import settings
 from django.core.cache import cache
@@ -15,7 +15,7 @@ from elasticsearch_dsl.query import EMPTY_QUERY, MoreLikeThis, Query
 from elasticsearch_dsl.response import Hit, Response
 
 import api.models as models
-from api.constants.media_types import OriginIndex
+from api.constants.media_types import OriginIndex, SearchIndex
 from api.constants.sorting import INDEXED_ON
 from api.serializers import media_serializers
 from api.utils import tallies
@@ -270,7 +270,7 @@ def _apply_filter(
     return s
 
 
-def _exclude_filtered(s: Search):
+def get_excluded_providers():
     """Hide data sources from the catalog dynamically."""
 
     filter_cache_key = "filtered_providers"
@@ -282,9 +282,7 @@ def _exclude_filtered(s: Search):
         cache.set(
             key=filter_cache_key, timeout=FILTER_CACHE_TIMEOUT, value=filtered_providers
         )
-    to_exclude = [f["provider_identifier"] for f in filtered_providers]
-    s = s.exclude("terms", provider=to_exclude)
-    return s
+    return [f["provider_identifier"] for f in filtered_providers]
 
 
 def _exclude_sensitive_by_param(s: Search, search_params):
@@ -296,7 +294,7 @@ def _exclude_sensitive_by_param(s: Search, search_params):
 def _resolve_index(
     index: Literal["image", "audio"],
     search_params: media_serializers.MediaSearchRequestSerializer,
-) -> Literal["image", "image-filtered", "audio", "audio-filtered"]:
+) -> SearchIndex:
     use_filtered_index = all(
         (
             settings.ENABLE_FILTERED_INDEX_QUERIES,
@@ -304,12 +302,13 @@ def _resolve_index(
         )
     )
     if use_filtered_index:
-        return f"{index}-filtered"
+        return cast(SearchIndex, f"{index}-filtered")
 
     return index
 
 
-def search(
+def query_media(
+    strategy: Literal["default_search", "collection"],
     search_params: media_serializers.MediaSearchRequestSerializer,
     origin_index: OriginIndex,
     exact_index: bool,
@@ -317,10 +316,18 @@ def search(
     ip: int,
     filter_dead: bool,
     page: int = 1,
+    collection_params: dict[str, str] | None = None,
 ) -> tuple[list[Hit], int, int, dict]:
     """
-    Perform a ranked paginated search from the set of keywords and, optionally, filters.
+    If ``strategy`` is ``search``, perform a ranked paginated search
+    from the set of keywords and, optionally, filters.
+    If ``strategy`` is ``collection``, perform a paginated search
+    for the `tag`, `source` or `source` and `creator` combination, based on
+    the given ``collection_params``.
 
+    :param strategy: Whether to perform a default search or retrieve a collection.
+    :param collection_params: The collection parameters (e.g. tag, source, or
+    source+creator).
     :param search_params: Search parameters. See
      :class: `ImageSearchQueryStringSerializer`.
     :param origin_index: The Elasticsearch index to search (e.g. 'image')
@@ -341,6 +348,49 @@ def search(
 
     search_client = Search(index=index)
 
+    if strategy == "collection":
+        s = build_collection_query(search_client, search_params, collection_params)
+    else:
+        s = build_search_query(search_client, search_params)
+    # Route users to the same Elasticsearch worker node to reduce
+    # pagination inconsistencies and increase cache hits.
+    s = s.params(preference=str(ip), request_timeout=7)
+
+    # Sort by new for collections or if the parameter is explicitly set
+    if (
+        strategy == "collection"
+        or search_params.validated_data["sort_by"] == INDEXED_ON
+    ):
+        s = s.sort({"created_on": {"order": search_params.validated_data["sort_dir"]}})
+
+    # Execute paginated search
+    page_count, result_count, results = execute_search(s, page, page_size, filter_dead)
+
+    tally_results(index, results, page, page_size)
+
+    if not results:
+        results = []
+
+    result_ids = [result.identifier for result in results]
+    search_context = SearchContext.build(result_ids, origin_index)
+
+    return results, page_count, result_count, search_context.asdict()
+
+
+def build_search_query(
+    search_client: Search, search_params: media_serializers.MediaSearchRequestSerializer
+):
+    """
+    Build the default search query for the given search parameters.
+    The filters and excluded sources do not affect the search result ranking.
+    If `q` is present in the search parameters, it will be used to search
+    the `title`, `tag` and `description` fields.
+    Otherwise, `creator`, `title`, `tags` will be searched, if they are present.
+
+    :param search_client: the search client to build the query for.
+    :param search_params: validated search parameters.
+    :return: the search client with the query applied.
+    """
     s = search_client
     # Apply term filters. Each tuple pairs a filter's parameter name in the API
     # with its corresponding field in Elasticsearch. "None" means that the
@@ -369,7 +419,8 @@ def search(
 
     # Exclude mature content and disabled sources
     s = _exclude_sensitive_by_param(s, search_params)
-    s = _exclude_filtered(s)
+    if excluded_providers := get_excluded_providers():
+        s = s.exclude("terms", provider=excluded_providers)
 
     # Search either by generic multimatch or by "advanced search" with
     # individual field-level queries specified.
@@ -409,6 +460,7 @@ def search(
             tags = _quote_escape(search_params.data["tags"])
             s = s.query("simple_query_string", fields=["tags.name"], query=tags)
 
+    # Apply ranking settings
     if settings.USE_RANK_FEATURES:
         feature_boost = {"standardized_popularity": DEFAULT_BOOST}
         if search_params.data["unstable__authority"]:
@@ -428,36 +480,67 @@ def search(
     s = s.highlight(*search_fields)
     s = s.highlight_options(order="score")
     s.extra(track_scores=True)
-    # Route users to the same Elasticsearch worker node to reduce
-    # pagination inconsistencies and increase cache hits.
-    s = s.params(preference=str(ip), request_timeout=7)
+    return s
 
-    # Sort by new
-    if search_params.validated_data["sort_by"] == INDEXED_ON:
-        s = s.sort({"created_on": {"order": search_params.validated_data["sort_dir"]}})
 
-    # Paginate
-    start, end = _get_query_slice(s, page_size, page, filter_dead)
-    s = s[start:end]
-    try:
-        if settings.VERBOSE_ES_RESPONSE:
-            log.info(pprint.pprint(s.to_dict()))
+def build_collection_query(
+    s: Search,
+    search_params: media_serializers.MediaSearchRequestSerializer,
+    collection_params: dict[str, str],
+):
+    """
+    Build the query to retrieve all the items in a collection.
+    In the future, we can add other filters such as license and
+    license type.
+    :param s: the search client to build the query for.
+    :param search_params: the validated search parameters.
+    :param collection_params: the parameters for the collection.
+    :return: the search client with the query applied.
+    """
+    log.info(f"Building collection query for {s}, {search_params}, {collection_params}")
+    search_query = {"filter": [], "must": [], "should": [], "must_not": []}
+    filters = [
+        ("tag", "tags.name.keyword"),
+        ("source", "source.keyword"),
+        ("creator", "creator.keyword"),
+    ]
+    for serializer_field, es_field in filters:
+        if serializer_field in collection_params:
+            arguments = collection_params.get(serializer_field)
+            if not arguments:
+                continue
+            arguments = arguments.split(",")
+            parameter = es_field or serializer_field
+            search_query["filter"].append({"terms": {parameter: arguments}})
 
-        search_response = s.execute()
+    # Exclude mature content and disabled sources
+    if not search_params.validated_data["include_sensitive_results"]:
+        search_query["must_not"].append({"term": {"mature": True}})
+    if excluded_providers := get_excluded_providers():
+        search_query["must_not"].append({"terms": {"provider": excluded_providers}})
 
-        if settings.VERBOSE_ES_RESPONSE:
-            log.info(pprint.pprint(search_response.to_dict()))
-    except (RequestError, NotFoundError) as e:
-        raise ValueError(e)
+    # Rank the `tag` results by popularity and authority
+    if "tag" in collection_params:
+        feature_boost = {
+            "standardized_popularity": DEFAULT_BOOST,
+            "authority_boost": DEFAULT_BOOST,
+        }
+        rank_queries = [
+            Q("rank_feature", field=field, boost=boost)
+            for field, boost in feature_boost.items()
+        ]
+        search_query["should"].extend(rank_queries)
 
-    results = _post_process_results(
-        s, start, end, page_size, search_response, filter_dead
-    )
+    log.info(f"Search query: {search_query}")
+    s = s.query(Q("bool", **search_query))
+    return s
 
-    result_count, page_count = _get_result_and_page_count(
-        search_response, results, page_size, page
-    )
 
+def tally_results(index, results, page, page_size):
+    """
+    Tally the number of the results from each provider in the results
+    for the search query.
+    """
     results_to_tally = results or []
     max_result_depth = page * page_size
     if max_result_depth <= 80:
@@ -486,13 +569,31 @@ def search(
         # check things like provider density for a set of queries.
         tallies.count_provider_occurrences(results_to_tally, index)
 
-    if not results:
-        results = []
 
-    result_ids = [result.identifier for result in results]
-    search_context = SearchContext.build(result_ids, origin_index)
+def execute_search(s, page, page_size, filter_dead):
+    """
+    Execute search for the given query slice, post-processes the results,
+    and returns the results and result and page counts.
+    """
+    start, end = _get_query_slice(s, page_size, page, filter_dead)
+    s = s[start:end]
+    try:
+        if settings.VERBOSE_ES_RESPONSE:
+            log.info(pprint.pprint(s.to_dict()))
 
-    return results, page_count, result_count, search_context.asdict()
+        search_response = s.execute()
+
+        if settings.VERBOSE_ES_RESPONSE:
+            log.info(pprint.pprint(search_response.to_dict()))
+    except (RequestError, NotFoundError) as e:
+        raise ValueError(e)
+    results = _post_process_results(
+        s, start, end, page_size, search_response, filter_dead
+    )
+    result_count, page_count = _get_result_and_page_count(
+        search_response, results, page_size, page
+    )
+    return page_count, result_count, results
 
 
 def related_media(uuid, index, filter_dead):
@@ -516,7 +617,8 @@ def related_media(uuid, index, filter_dead):
     )
     # Never show mature content in recommendations.
     s = s.exclude("term", mature=True)
-    s = _exclude_filtered(s)
+    if excluded_providers := get_excluded_providers():
+        s = s.exclude("terms", provider=excluded_providers)
     page_size = 10
     page = 1
     start, end = _get_query_slice(s, page_size, page, filter_dead)
