@@ -7,15 +7,19 @@ from test.factory.es_http import (
     MOCK_LIVE_RESULT_URL_PREFIX,
     create_mock_es_http_image_search_response,
 )
+from typing import cast
 from unittest import mock
 from uuid import uuid4
 
 import pook
 import pytest
 from django_redis import get_redis_connection
-from elasticsearch_dsl import Search
+from elasticsearch_dsl import Q, Search
 
+from api.constants.media_types import OriginIndex
 from api.controllers import search_controller
+from api.controllers.search_controller import build_collection_query
+from api.serializers import media_serializers
 from api.utils import tallies
 from api.utils.dead_link_mask import get_query_hash, save_query_mask
 from api.utils.search_context import SearchContext
@@ -454,10 +458,11 @@ def test_search_tallies_pages_less_than_5(
     )
     serializer.is_valid()
 
-    search_controller.search(
+    search_controller.query_media(
+        strategy="default_search",
         search_params=serializer,
         ip=0,
-        origin_index=media_type_config.origin_index,
+        origin_index=cast(OriginIndex, media_type_config.origin_index),
         exact_index=False,
         page=page,
         page_size=page_size,
@@ -493,10 +498,11 @@ def test_search_tallies_handles_empty_page(
     serializer = media_type_config.search_request_serializer(data={"q": "dogs"})
     serializer.is_valid()
 
-    search_controller.search(
+    search_controller.query_media(
+        strategy="default_search",
         search_params=serializer,
         ip=0,
-        origin_index=media_type_config.origin_index,
+        origin_index=cast(OriginIndex, media_type_config.origin_index),
         exact_index=False,
         # Force calculated result depth length to include results within 80th position and above
         # to force edge case where retrieved results are only partially tallied.
@@ -536,10 +542,11 @@ def test_resolves_index(
     )
     serializer.is_valid()
 
-    search_controller.search(
+    search_controller.query_media(
+        strategy="default_search",
         search_params=serializer,
         ip=0,
-        origin_index=origin_index,
+        origin_index=cast(OriginIndex, origin_index),
         exact_index=False,
         page=1,
         page_size=20,
@@ -603,7 +610,8 @@ def test_no_post_process_results_recursion(
         data={"q": "bird perched"}
     )
     serializer.is_valid()
-    results, _, _, _ = search_controller.search(
+    results, _, _, _ = search_controller.query_media(
+        strategy="default_search",
         search_params=serializer,
         ip=0,
         origin_index=image_media_type_config.origin_index,
@@ -741,7 +749,8 @@ def test_post_process_results_recurses_as_needed(
         data={"q": "bird perched"}
     )
     serializer.is_valid()
-    results, _, _, _ = search_controller.search(
+    results, _, _, _ = search_controller.query_media(
+        strategy="default_search",
         search_params=serializer,
         ip=0,
         origin_index=image_media_type_config.origin_index,
@@ -759,3 +768,78 @@ def test_post_process_results_recurses_as_needed(
     }
 
     assert wrapped_post_process_results.call_count == 2
+
+
+DEFAULT_RANK_QUERY = [
+    Q("rank_feature", field=field, boost=10000)
+    for field in ["standardized_popularity", "authority_boost"]
+]
+
+
+@pytest.mark.parametrize(
+    ("include_sensitive_results", "collection_params", "expected_query"),
+    [
+        pytest.param(
+            False,
+            {"tag": "art,science"},
+            Q(
+                "bool",
+                filter=[{"terms": {"tags.name.keyword": ["art", "science"]}}],
+                must_not=[{"term": {"mature": True}}],
+                should=DEFAULT_RANK_QUERY,
+            ),
+            id="filter_by_tag_without_sensitive",
+        ),
+        pytest.param(
+            True,
+            {"tag": "art"},
+            Q(
+                "bool",
+                filter=[{"terms": {"tags.name.keyword": ["art"]}}],
+                should=DEFAULT_RANK_QUERY,
+            ),
+            id="filter_by_tag_with_sensitive",
+        ),
+        pytest.param(
+            False,
+            {"source": "flickr,smithsonian"},
+            Q(
+                "bool",
+                filter=[{"terms": {"source.keyword": ["flickr", "smithsonian"]}}],
+                must_not=[{"term": {"mature": True}}],
+            ),
+            id="filter_by_source_without_sensitive",
+        ),
+        pytest.param(
+            False,
+            {"source": "flickr", "creator": "nasa"},
+            Q(
+                "bool",
+                filter=[
+                    {"terms": {"source.keyword": ["flickr"]}},
+                    {"terms": {"creator.keyword": ["nasa"]}},
+                ],
+                must_not=[{"term": {"mature": True}}],
+            ),
+            id="filter_by_creator_without_sensitive",
+        ),
+    ],
+)
+@mock.patch("api.controllers.search_controller.Search", wraps=Search)
+def test_build_collection_query(
+    mock_search_class, include_sensitive_results, collection_params, expected_query
+):
+    # Setup
+    mock_search = mock_search_class.return_value
+
+    search_params = media_serializers.MediaSearchRequestSerializer(
+        data={"unstable__include_sensitive_results": include_sensitive_results}
+    )
+    search_params.is_valid()
+
+    # Action
+    build_collection_query(mock_search, search_params, dict(collection_params))
+    actual_query = mock_search.query.call_args[0][0]
+
+    # Validate
+    assert actual_query == expected_query

@@ -319,7 +319,7 @@ def query_media(
     collection_params: dict[str, str] | None = None,
 ) -> tuple[list[Hit], int, int, dict]:
     """
-    If ``strategy`` is ``search``, perform a ranked paginated search
+    If ``strategy`` is ``default_search``, perform a ranked paginated search
     from the set of keywords and, optionally, filters.
     If ``strategy`` is ``collection``, perform a paginated search
     for the `tag`, `source` or `source` and `creator` combination, based on
@@ -497,7 +497,6 @@ def build_collection_query(
     :param collection_params: the parameters for the collection.
     :return: the search client with the query applied.
     """
-    log.info(f"Building collection query for {s}, {search_params}, {collection_params}")
     search_query = {"filter": [], "must": [], "should": [], "must_not": []}
     filters = [
         ("tag", "tags.name.keyword"),
@@ -530,8 +529,6 @@ def build_collection_query(
             for field, boost in feature_boost.items()
         ]
         search_query["should"].extend(rank_queries)
-
-    log.info(f"Search query: {search_query}")
     s = s.query(Q("bool", **search_query))
     return s
 
