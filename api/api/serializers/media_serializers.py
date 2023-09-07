@@ -38,9 +38,8 @@ from api.utils.url import add_protocol
         "internal__index",
     ],
 )
-class MediaSearchRequestSerializer(serializers.Serializer):
-    """This serializer parses and validates search query string parameters."""
-
+class MediaListRequestSerializer(serializers.Serializer):
+    media_type = None
     DeprecatedParam = namedtuple("DeprecatedParam", ["original", "successor"])
     deprecated_params = [
         DeprecatedParam("li", "license"),
@@ -49,12 +48,8 @@ class MediaSearchRequestSerializer(serializers.Serializer):
         DeprecatedParam("provider", "source"),
     ]
     fields_names = [
-        "q",
         "license",
         "license_type",
-        "creator",
-        "tags",
-        "title",
         "filter_dead",
         "extension",
         "mature",
@@ -71,12 +66,6 @@ class MediaSearchRequestSerializer(serializers.Serializer):
     Keep the fields names in sync with the actual fields below as this list is
     used to generate Swagger documentation.
     """
-
-    q = serializers.CharField(
-        label="query",
-        help_text="A query string that should not exceed 200 characters in length",
-        required=False,
-    )
     license = serializers.CharField(
         label="licenses",
         help_text=make_comma_separated_help_text(LICENSE_GROUPS["all"], "licenses"),
@@ -88,24 +77,6 @@ class MediaSearchRequestSerializer(serializers.Serializer):
             LICENSE_GROUPS.keys(), "license types"
         ),
         required=False,
-    )
-    creator = serializers.CharField(
-        label="creator",
-        help_text="Search by creator only. Cannot be used with `q`.",
-        required=False,
-        max_length=200,
-    )
-    tags = serializers.CharField(
-        label="tags",
-        help_text="Search by tag only. Cannot be used with `q`.",
-        required=False,
-        max_length=200,
-    )
-    title = serializers.CharField(
-        label="title",
-        help_text="Search by title only. Cannot be used with `q`.",
-        required=False,
-        max_length=200,
     )
     filter_dead = serializers.BooleanField(
         label="filter_dead",
@@ -204,9 +175,6 @@ class MediaSearchRequestSerializer(serializers.Serializer):
         max_length = 200
         return value if len(value) <= max_length else value[:max_length]
 
-    def validate_q(self, value):
-        return self._truncate(value)
-
     @staticmethod
     def validate_license(value):
         """Check whether license is a valid license code."""
@@ -234,15 +202,6 @@ class MediaSearchRequestSerializer(serializers.Serializer):
             license_groups.append(LICENSE_GROUPS[_type])
         intersected = set.intersection(*license_groups)
         return ",".join(intersected)
-
-    def validate_creator(self, value):
-        return self._truncate(value)
-
-    def validate_tags(self, value):
-        return self._truncate(value)
-
-    def validate_title(self, value):
-        return self._truncate(value)
 
     def validate_unstable__sort_by(self, value):
         return RELEVANCE if self.is_request_anonymous() else value
@@ -276,10 +235,12 @@ class MediaSearchRequestSerializer(serializers.Serializer):
         :return: ``None`` if request is anonymous, the provided name if it is valid
         :raise: ``serializers.ValidationError`` if not anonymous and invalid index name
         """
-
         if self.is_request_anonymous():
             return None
         if not settings.ES.indices.exists(value):  # ``exists`` includes aliases.
+            raise serializers.ValidationError(f"Invalid index name `{value}`.")
+
+        if not value.startswith(self.media_type):
             raise serializers.ValidationError(f"Invalid index name `{value}`.")
         return value
 
@@ -332,6 +293,133 @@ class MediaSearchRequestSerializer(serializers.Serializer):
     @property
     def needs_db(self) -> bool:
         return False
+
+
+@extend_schema_serializer(
+    # Hide unstable and internal fields from documentation.
+    # Also see `field_names` below.
+    exclude_fields=[
+        "unstable__sort_by",
+        "unstable__sort_dir",
+        "unstable__authority",
+        "unstable__authority_boost",
+        "unstable__include_sensitive_results",
+        "internal__index",
+    ],
+)
+class MediaSearchRequestSerializer(MediaListRequestSerializer):
+    """This serializer parses and validates search query string parameters."""
+
+    fields_names = [
+        *MediaListRequestSerializer.fields_names,
+        "q",
+        "creator",
+        "tags",
+        "title",
+    ]
+    """
+    Keep the fields names in sync with the actual fields below as this list is
+    used to generate Swagger documentation.
+    """
+
+    q = serializers.CharField(
+        label="query",
+        help_text="A query string that should not exceed 200 characters in length",
+        required=False,
+    )
+    creator = serializers.CharField(
+        label="creator",
+        help_text="Search by creator only. Cannot be used with `q`.",
+        required=False,
+        max_length=200,
+    )
+    tags = serializers.CharField(
+        label="tags",
+        help_text="Search by tag only. Cannot be used with `q`.",
+        required=False,
+        max_length=200,
+    )
+    title = serializers.CharField(
+        label="title",
+        help_text="Search by title only. Cannot be used with `q`.",
+        required=False,
+        max_length=200,
+    )
+
+    def validate_q(self, value):
+        return self._truncate(value)
+
+    def validate_creator(self, value):
+        return self._truncate(value)
+
+    def validate_tags(self, value):
+        return self._truncate(value)
+
+    def validate_title(self, value):
+        return self._truncate(value)
+
+
+@extend_schema_serializer(
+    # Hide unstable and internal fields from documentation.
+    # Also see `field_names` below.
+    exclude_fields=[
+        "unstable__sort_by",
+        "unstable__sort_dir",
+        "unstable__authority",
+        "unstable__authority_boost",
+        "unstable__include_sensitive_results",
+        "internal__index",
+    ],
+)
+class MediaCollectionRequestSerializer(MediaListRequestSerializer):
+    """This serializer parses and validates collection path and query parameters."""
+
+    fields_names = [
+        *MediaListRequestSerializer.fields_names,
+        "source",
+        "creator",
+        "tag",
+    ]
+    """
+    Keep the fields names in sync with the actual fields below as this list is
+    used to generate Swagger documentation.
+    """
+
+    tag = serializers.CharField(
+        label="tag",
+        help_text="Get the collection for selected tag.",
+        required=False,
+        max_length=200,
+    )
+    creator = serializers.CharField(
+        label="creator",
+        help_text="Get the collection for selected creator. "
+        "Must be used with `source`.",
+        required=False,
+    )
+    source = serializers.CharField(
+        label="source",
+        help_text="Get the collection for selected source. "
+        "Can be used with `creator` to get the creator "
+        "collection from this source.",
+        required=False,
+    )
+
+    def validate_tag(self, value):
+        return self._truncate(value)
+
+    def validate_creator(self, value):
+        return self._truncate(value)
+
+    def validate_source(self, value):
+        """Check whether source is a valid source."""
+        allowed_sources = list(search_controller.get_sources(self.media_type).keys())
+        source = value.lower()
+        if source not in allowed_sources:
+            raise serializers.ValidationError(
+                f"Invalid source `{value}`. Allowed sources are: {allowed_sources}."
+            )
+        return source
 
 
 class MediaThumbnailRequestSerializer(serializers.Serializer):

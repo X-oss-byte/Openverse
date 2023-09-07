@@ -24,6 +24,7 @@ from api.docs.image_docs import (
 from api.docs.image_docs import watermark as watermark_doc
 from api.models import Image
 from api.serializers.image_serializers import (
+    ImageCollectionRequestSerializer,
     ImageReportRequestSerializer,
     ImageSearchRequestSerializer,
     ImageSerializer,
@@ -48,7 +49,8 @@ class ImageViewSet(MediaViewSet):
     """Viewset for all endpoints pertaining to images."""
 
     model_class = Image
-    query_serializer_class = ImageSearchRequestSerializer
+    search_query_serializer_class = ImageSearchRequestSerializer
+    collection_serializer_class = ImageCollectionRequestSerializer
     default_index = settings.MEDIA_INDEX_MAPPING[IMAGE_TYPE]
 
     serializer_class = ImageSerializer

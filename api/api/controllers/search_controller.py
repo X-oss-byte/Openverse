@@ -308,8 +308,9 @@ def _resolve_index(
 
 
 def query_media(
-    strategy: Literal["default_search", "collection"],
-    search_params: media_serializers.MediaSearchRequestSerializer,
+    strategy: Literal["search", "collection"],
+    search_params: media_serializers.MediaSearchRequestSerializer
+    | media_serializers.MediaCollectionRequestSerializer,
     origin_index: OriginIndex,
     exact_index: bool,
     page_size: int,
@@ -319,7 +320,7 @@ def query_media(
     collection_params: dict[str, str] | None = None,
 ) -> tuple[list[Hit], int, int, dict]:
     """
-    If ``strategy`` is ``default_search``, perform a ranked paginated search
+    If ``strategy`` is ``search``, perform a ranked paginated search
     from the set of keywords and, optionally, filters.
     If ``strategy`` is ``collection``, perform a paginated search
     for the `tag`, `source` or `source` and `creator` combination, based on
@@ -349,7 +350,7 @@ def query_media(
     search_client = Search(index=index)
 
     if strategy == "collection":
-        s = build_collection_query(search_client, search_params, collection_params)
+        s = build_collection_query(search_client, search_params)
     else:
         s = build_search_query(search_client, search_params)
     # Route users to the same Elasticsearch worker node to reduce
@@ -485,30 +486,41 @@ def build_search_query(
 
 def build_collection_query(
     s: Search,
-    search_params: media_serializers.MediaSearchRequestSerializer,
-    collection_params: dict[str, str],
+    search_params: media_serializers.MediaCollectionRequestSerializer,
 ):
     """
     Build the query to retrieve all the items in a collection.
-    In the future, we can add other filters such as license and
-    license type.
+    The common filters, e.g. license or category, are also applied.
     :param s: the search client to build the query for.
     :param search_params: the validated search parameters.
-    :param collection_params: the parameters for the collection.
     :return: the search client with the query applied.
     """
     search_query = {"filter": [], "must": [], "should": [], "must_not": []}
+    # Apply the term filters. Each tuple pairs a filter's parameter name in the API
+    # with its corresponding field in Elasticsearch. "None" means that the
+    # names are identical. The `allow_multiple` flag indicates whether the
+    # filter accepts multiple comma-separated values.
     filters = [
-        ("tag", "tags.name.keyword"),
-        ("source", "source.keyword"),
-        ("creator", "creator.keyword"),
+        # Collection filters allow a single value.
+        ("tag", "tags.name.keyword", False),
+        ("source", "source.keyword", False),
+        ("creator", "creator.keyword", False),
+        # The following filters allow multiple comma-separated values.
+        ("license", "license.keyword", True),
+        ("license_type", "license.keyword", True),
+        ("extension", None, True),
+        ("category", None, True),
+        ("categories", "category", True),
+        ("length", None, True),
+        ("aspect_ratio", None, True),
+        ("size", None, True),
     ]
-    for serializer_field, es_field in filters:
-        if serializer_field in collection_params:
-            arguments = collection_params.get(serializer_field)
+    for serializer_field, es_field, allow_multiple in filters:
+        if serializer_field in search_params.data:
+            arguments = search_params.data.get(serializer_field)
             if not arguments:
                 continue
-            arguments = arguments.split(",")
+            arguments = arguments.split(",") if allow_multiple else [arguments]
             parameter = es_field or serializer_field
             search_query["filter"].append({"terms": {parameter: arguments}})
 
@@ -519,7 +531,7 @@ def build_collection_query(
         search_query["must_not"].append({"terms": {"provider": excluded_providers}})
 
     # Rank the `tag` results by popularity and authority
-    if "tag" in collection_params:
+    if "tag" in search_params.data:
         feature_boost = {
             "standardized_popularity": DEFAULT_BOOST,
             "authority_boost": DEFAULT_BOOST,

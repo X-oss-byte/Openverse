@@ -10,6 +10,10 @@ from rest_framework.viewsets import ReadOnlyModelViewSet
 from api.controllers import search_controller
 from api.models import ContentProvider
 from api.models.media import AbstractMedia
+from api.serializers.media_serializers import (
+    MediaCollectionRequestSerializer,
+    MediaSearchRequestSerializer,
+)
 from api.serializers.provider_serializers import ProviderSerializer
 from api.utils import image_proxy
 from api.utils.pagination import StandardPagination
@@ -30,14 +34,16 @@ class MediaViewSet(ReadOnlyModelViewSet):
 
     # Populate these in the corresponding subclass
     model_class: type[AbstractMedia] = None
-    query_serializer_class = None
+    search_query_serializer_class = None
+    collection_serializer_class = None
     default_index = None
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         required_fields = [
             self.model_class,
-            self.query_serializer_class,
+            self.search_query_serializer_class,
+            self.collection_serializer_class,
             self.default_index,
         ]
         if any(val is None for val in required_fields):
@@ -60,15 +66,30 @@ class MediaViewSet(ReadOnlyModelViewSet):
             ).values_list("provider_identifier")
         )
 
-    def get_serializer_context(self):
+    def get_serializer_context(
+        self, strategy: Literal["search", "collection"] = "search"
+    ):
         context = super().get_serializer_context()
-        req_serializer = self._get_request_serializer(self.request)
+        req_serializer = self._get_request_serializer(self.request, strategy)
         context.update({"validated_data": req_serializer.validated_data})
         return context
 
-    def _get_request_serializer(self, request):
-        req_serializer = self.query_serializer_class(
-            data=request.query_params, context={"request": request}
+    def _get_request_serializer(
+        self,
+        request,
+        strategy: Literal["search", "collection"],
+        additional_context=None,
+    ):
+        query_serializer_class = (
+            self.search_query_serializer_class
+            if strategy == "search"
+            else self.collection_serializer_class
+        )
+        serializer_data = request.query_params
+        if additional_context:
+            serializer_data |= additional_context
+        req_serializer = query_serializer_class(
+            data=serializer_data, context={"request": request}
         )
         req_serializer.is_valid(raise_exception=True)
         return req_serializer
@@ -100,16 +121,20 @@ class MediaViewSet(ReadOnlyModelViewSet):
         return Response(serializer.data)
 
     def list(self, request, *_, **__):
-        return self.get_media_results(request, "search")
+        params = self._get_request_serializer(request, strategy="search")
+        return self.get_media_results(request, "search", params)
 
     def collection(self, request, tag, source, creator, *_, **__):
         if tag:
-            collection_params = {"tag": tag}
+            collection_params = {"tag": [tag]}
         elif creator:
-            collection_params = {"creator": creator, "source": source}
+            collection_params = {"creator": [creator], "source": [source]}
         else:
-            collection_params = {"source": source}
-        return self.get_media_results(request, "collection", collection_params)
+            collection_params = {"source": [source]}
+        params = self._get_request_serializer(
+            request, strategy="collection", additional_context=collection_params
+        )
+        return self.get_media_results(request, "collection", params)
 
     @action(detail=False, methods=["get"], url_path="tag/(?P<tag>[^/.]+)")
     def tag_collection(self, request, tag, *_, **__):
@@ -151,10 +176,8 @@ class MediaViewSet(ReadOnlyModelViewSet):
         self,
         request,
         strategy: Literal["search", "collection"],
-        collection_params: dict[str, str] = None,
+        params: MediaSearchRequestSerializer | MediaCollectionRequestSerializer,
     ):
-        params = self._get_request_serializer(request)
-
         page_size = self.paginator.page_size = params.data["page_size"]
         page = self.paginator.page = params.data["page"]
 
@@ -185,14 +208,15 @@ class MediaViewSet(ReadOnlyModelViewSet):
                 hashed_ip,
                 filter_dead,
                 page,
-                collection_params,
             )
             self.paginator.page_count = num_pages
             self.paginator.result_count = num_results
         except ValueError as e:
             raise APIException(getattr(e, "message", str(e)))
 
-        serializer_context = search_context | self.get_serializer_context()
+        serializer_context = search_context | self.get_serializer_context(
+            strategy=strategy
+        )
 
         serializer_class = self.get_serializer()
         if params.needs_db or serializer_class.needs_db:

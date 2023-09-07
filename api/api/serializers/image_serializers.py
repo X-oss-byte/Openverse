@@ -10,6 +10,8 @@ from api.models import Image, ImageReport
 from api.serializers.base import BaseModelSerializer
 from api.serializers.fields import EnumCharField
 from api.serializers.media_serializers import (
+    MediaCollectionRequestSerializer,
+    MediaListRequestSerializer,
     MediaReportRequestSerializer,
     MediaSearchRequestSerializer,
     MediaSerializer,
@@ -27,15 +29,12 @@ from api.utils.url import add_protocol
 ImageSearchRequestSourceSerializer = get_search_request_source_serializer("image")
 
 
-class ImageSearchRequestSerializer(
-    ImageSearchRequestSourceSerializer,
-    MediaSearchRequestSerializer,
-):
+class ImageListRequestSerializer(MediaListRequestSerializer):
     """Parse and validate search query string parameters."""
 
+    media_type = IMAGE_TYPE
     fields_names = [
-        *MediaSearchRequestSerializer.fields_names,
-        *ImageSearchRequestSourceSerializer.field_names,
+        *MediaListRequestSerializer.fields_names,
         "category",
         "aspect_ratio",
         "size",
@@ -62,13 +61,26 @@ class ImageSearchRequestSerializer(
         required=False,
     )
 
-    def validate_internal__index(self, value):
-        index = super().validate_internal__index(value)
-        if index is None:
-            return None
-        if not index.startswith(IMAGE_TYPE):
-            raise serializers.ValidationError(f"Invalid index name `{value}`.")
-        return index
+
+class ImageSearchRequestSerializer(
+    ImageListRequestSerializer,
+    ImageSearchRequestSourceSerializer,
+    MediaSearchRequestSerializer,
+):
+    fields_names = [
+        *MediaSearchRequestSerializer.fields_names,
+        *ImageSearchRequestSourceSerializer.field_names,
+        *ImageListRequestSerializer.fields_names,
+    ]
+
+
+class ImageCollectionRequestSerializer(
+    ImageListRequestSerializer, MediaCollectionRequestSerializer
+):
+    fields_names = [
+        *MediaCollectionRequestSerializer.fields_names,
+        *ImageListRequestSerializer.fields_names,
+    ]
 
 
 class ImageReportRequestSerializer(MediaReportRequestSerializer):

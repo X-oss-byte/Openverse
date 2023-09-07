@@ -8,6 +8,8 @@ from api.constants.media_types import AUDIO_TYPE
 from api.models import Audio, AudioReport, AudioSet
 from api.serializers.fields import EnumCharField, SchemableHyperlinkedIdentityField
 from api.serializers.media_serializers import (
+    MediaCollectionRequestSerializer,
+    MediaListRequestSerializer,
     MediaReportRequestSerializer,
     MediaSearchRequestSerializer,
     MediaSerializer,
@@ -24,14 +26,15 @@ from api.serializers.media_serializers import (
 AudioSearchRequestSourceSerializer = get_search_request_source_serializer("audio")
 
 
-class AudioSearchRequestSerializer(
+class AudioListRequestSerializer(
     AudioSearchRequestSourceSerializer,
-    MediaSearchRequestSerializer,
+    MediaListRequestSerializer,
 ):
     """Parse and validate search query string parameters."""
 
+    media_type = AUDIO_TYPE
     fields_names = [
-        *MediaSearchRequestSerializer.fields_names,
+        *MediaListRequestSerializer.fields_names,
         *AudioSearchRequestSourceSerializer.field_names,
         "category",
         "length",
@@ -61,13 +64,29 @@ class AudioSearchRequestSerializer(
     def needs_db(self) -> bool:
         return super().needs_db or self.data["peaks"]
 
-    def validate_internal__index(self, value):
-        index = super().validate_internal__index(value)
-        if index is None:
-            return None
-        if not index.startswith(AUDIO_TYPE):
-            raise serializers.ValidationError(f"Invalid index name `{value}`.")
-        return index
+
+class AudioSearchRequestSerializer(
+    AudioListRequestSerializer,
+    AudioSearchRequestSourceSerializer,
+    MediaSearchRequestSerializer,
+):
+    """Parse and validate search query string parameters."""
+
+    fields_names = [
+        *AudioListRequestSerializer.fields_names,
+        *AudioSearchRequestSourceSerializer.field_names,
+        *MediaSearchRequestSerializer.fields_names,
+    ]
+
+
+class AudioCollectionRequestSerializer(
+    AudioListRequestSerializer,
+    MediaCollectionRequestSerializer,
+):
+    fields_names = [
+        *MediaCollectionRequestSerializer.fields_names,
+        *AudioListRequestSerializer.fields_names,
+    ]
 
 
 class AudioReportRequestSerializer(MediaReportRequestSerializer):

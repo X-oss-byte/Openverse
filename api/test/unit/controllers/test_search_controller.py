@@ -19,7 +19,7 @@ from elasticsearch_dsl import Q, Search
 from api.constants.media_types import OriginIndex
 from api.controllers import search_controller
 from api.controllers.search_controller import build_collection_query
-from api.serializers import media_serializers
+from api.serializers import image_serializers
 from api.utils import tallies
 from api.utils.dead_link_mask import get_query_hash, save_query_mask
 from api.utils.search_context import SearchContext
@@ -459,7 +459,7 @@ def test_search_tallies_pages_less_than_5(
     serializer.is_valid()
 
     search_controller.query_media(
-        strategy="default_search",
+        strategy="search",
         search_params=serializer,
         ip=0,
         origin_index=cast(OriginIndex, media_type_config.origin_index),
@@ -499,7 +499,7 @@ def test_search_tallies_handles_empty_page(
     serializer.is_valid()
 
     search_controller.query_media(
-        strategy="default_search",
+        strategy="search",
         search_params=serializer,
         ip=0,
         origin_index=cast(OriginIndex, media_type_config.origin_index),
@@ -543,7 +543,7 @@ def test_resolves_index(
     serializer.is_valid()
 
     search_controller.query_media(
-        strategy="default_search",
+        strategy="search",
         search_params=serializer,
         ip=0,
         origin_index=cast(OriginIndex, origin_index),
@@ -611,7 +611,7 @@ def test_no_post_process_results_recursion(
     )
     serializer.is_valid()
     results, _, _, _ = search_controller.query_media(
-        strategy="default_search",
+        strategy="search",
         search_params=serializer,
         ip=0,
         origin_index=image_media_type_config.origin_index,
@@ -750,7 +750,7 @@ def test_post_process_results_recurses_as_needed(
     )
     serializer.is_valid()
     results, _, _, _ = search_controller.query_media(
-        strategy="default_search",
+        strategy="search",
         search_params=serializer,
         ip=0,
         origin_index=image_media_type_config.origin_index,
@@ -777,22 +777,20 @@ DEFAULT_RANK_QUERY = [
 
 
 @pytest.mark.parametrize(
-    ("include_sensitive_results", "collection_params", "expected_query"),
+    ("data", "expected_query"),
     [
         pytest.param(
-            False,
-            {"tag": "art,science"},
+            {"unstable__include_sensitive_results": False, "tag": "art"},
             Q(
                 "bool",
-                filter=[{"terms": {"tags.name.keyword": ["art", "science"]}}],
+                filter=[{"terms": {"tags.name.keyword": ["art"]}}],
                 must_not=[{"term": {"mature": True}}],
                 should=DEFAULT_RANK_QUERY,
             ),
             id="filter_by_tag_without_sensitive",
         ),
         pytest.param(
-            True,
-            {"tag": "art"},
+            {"unstable__include_sensitive_results": True, "tag": "art"},
             Q(
                 "bool",
                 filter=[{"terms": {"tags.name.keyword": ["art"]}}],
@@ -801,18 +799,20 @@ DEFAULT_RANK_QUERY = [
             id="filter_by_tag_with_sensitive",
         ),
         pytest.param(
-            False,
-            {"source": "flickr,smithsonian"},
+            {"unstable__include_sensitive_results": False, "source": "flickr"},
             Q(
                 "bool",
-                filter=[{"terms": {"source.keyword": ["flickr", "smithsonian"]}}],
+                filter=[{"terms": {"source.keyword": ["flickr"]}}],
                 must_not=[{"term": {"mature": True}}],
             ),
             id="filter_by_source_without_sensitive",
         ),
         pytest.param(
-            False,
-            {"source": "flickr", "creator": "nasa"},
+            {
+                "unstable__include_sensitive_results": False,
+                "source": "flickr",
+                "creator": "nasa",
+            },
             Q(
                 "bool",
                 filter=[
@@ -826,19 +826,15 @@ DEFAULT_RANK_QUERY = [
     ],
 )
 @mock.patch("api.controllers.search_controller.Search", wraps=Search)
-def test_build_collection_query(
-    mock_search_class, include_sensitive_results, collection_params, expected_query
-):
+def test_build_collection_query(mock_search_class, data, expected_query):
     # Setup
     mock_search = mock_search_class.return_value
 
-    search_params = media_serializers.MediaSearchRequestSerializer(
-        data={"unstable__include_sensitive_results": include_sensitive_results}
-    )
+    search_params = image_serializers.ImageCollectionRequestSerializer(data)
     search_params.is_valid()
 
     # Action
-    build_collection_query(mock_search, search_params, dict(collection_params))
+    build_collection_query(mock_search, search_params)
     actual_query = mock_search.query.call_args[0][0]
 
     # Validate

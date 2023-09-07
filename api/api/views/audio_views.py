@@ -17,6 +17,7 @@ from api.docs.audio_docs import (
 )
 from api.models import Audio
 from api.serializers.audio_serializers import (
+    AudioCollectionRequestSerializer,
     AudioReportRequestSerializer,
     AudioSearchRequestSerializer,
     AudioSerializer,
@@ -38,7 +39,8 @@ class AudioViewSet(MediaViewSet):
     """Viewset for all endpoints pertaining to audio."""
 
     model_class = Audio
-    query_serializer_class = AudioSearchRequestSerializer
+    search_query_serializer_class = AudioSearchRequestSerializer
+    collection_serializer_class = AudioCollectionRequestSerializer
     default_index = settings.MEDIA_INDEX_MAPPING[AUDIO_TYPE]
 
     serializer_class = AudioSerializer
