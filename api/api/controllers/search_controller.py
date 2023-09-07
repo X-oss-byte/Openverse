@@ -317,18 +317,14 @@ def query_media(
     ip: int,
     filter_dead: bool,
     page: int = 1,
-    collection_params: dict[str, str] | None = None,
 ) -> tuple[list[Hit], int, int, dict]:
     """
     If ``strategy`` is ``search``, perform a ranked paginated search
     from the set of keywords and, optionally, filters.
     If ``strategy`` is ``collection``, perform a paginated search
-    for the `tag`, `source` or `source` and `creator` combination, based on
-    the given ``collection_params``.
+    for the `tag`, `source` or `source` and `creator` combination.
 
     :param strategy: Whether to perform a default search or retrieve a collection.
-    :param collection_params: The collection parameters (e.g. tag, source, or
-    source+creator).
     :param search_params: Search parameters. See
      :class: `ImageSearchQueryStringSerializer`.
     :param origin_index: The Elasticsearch index to search (e.g. 'image')
