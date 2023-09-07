@@ -396,6 +396,7 @@ class MediaCollectionRequestSerializer(MediaListRequestSerializer):
         help_text="Get the collection for selected creator. "
         "Must be used with `source`.",
         required=False,
+        max_length=200,
     )
     source = serializers.CharField(
         label="source",
@@ -403,6 +404,7 @@ class MediaCollectionRequestSerializer(MediaListRequestSerializer):
         "Can be used with `creator` to get the creator "
         "collection from this source.",
         required=False,
+        max_length=200,
     )
 
     def validate_tag(self, value):
@@ -420,6 +422,20 @@ class MediaCollectionRequestSerializer(MediaListRequestSerializer):
                 f"Invalid source `{value}`. Allowed sources are: {allowed_sources}."
             )
         return source
+
+    def validate(self, data):
+        data = super().validate(data)
+        if "creator" in self.initial_data and "source" not in self.initial_data:
+            raise serializers.ValidationError(
+                "Cannot set `source` without `creator`. "
+                "Use both of these or neither of them."
+            )
+        if not data.get("source") and not data.get("creator") and not data.get("tag"):
+            raise serializers.ValidationError(
+                "At least one of `source`, `creator` or `tag` must be "
+                "set for a collection view."
+            )
+        return data
 
 
 class MediaThumbnailRequestSerializer(serializers.Serializer):

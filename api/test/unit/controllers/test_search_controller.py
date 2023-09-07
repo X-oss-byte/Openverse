@@ -780,36 +780,49 @@ DEFAULT_RANK_QUERY = [
     ("data", "expected_query"),
     [
         pytest.param(
-            {"unstable__include_sensitive_results": False, "tag": "art"},
-            Q(
-                "bool",
-                filter=[{"terms": {"tags.name.keyword": ["art"]}}],
-                must_not=[{"term": {"mature": True}}],
-                should=DEFAULT_RANK_QUERY,
-            ),
-            id="filter_by_tag_without_sensitive",
-        ),
-        pytest.param(
             {"unstable__include_sensitive_results": True, "tag": "art"},
             Q(
                 "bool",
                 filter=[{"terms": {"tags.name.keyword": ["art"]}}],
                 should=DEFAULT_RANK_QUERY,
             ),
-            id="filter_by_tag_with_sensitive",
+            id="filter_by_tag_with_sensitive_bool",
         ),
         pytest.param(
-            {"unstable__include_sensitive_results": False, "source": "flickr"},
+            {"tag": "art"},
+            Q(
+                "bool",
+                filter=[{"terms": {"tags.name.keyword": ["art"]}}],
+                must_not=[{"term": {"mature": True}}],
+                should=DEFAULT_RANK_QUERY,
+            ),
+            id="filter_by_tag",
+        ),
+        pytest.param(
+            {"tag": "art", "license": "cc0,by", "category": "photograph"},
+            Q(
+                "bool",
+                filter=[
+                    {"terms": {"tags.name.keyword": ["art"]}},
+                    {"terms": {"license.keyword": ["cc0", "by"]}},
+                    {"terms": {"category": ["photograph"]}},
+                ],
+                should=DEFAULT_RANK_QUERY,
+                must_not=[{"term": {"mature": True}}],
+            ),
+            id="filter_by_tag_with_other_filters",
+        ),
+        pytest.param(
+            {"source": "flickr"},
             Q(
                 "bool",
                 filter=[{"terms": {"source.keyword": ["flickr"]}}],
                 must_not=[{"term": {"mature": True}}],
             ),
-            id="filter_by_source_without_sensitive",
+            id="filter_by_source",
         ),
         pytest.param(
             {
-                "unstable__include_sensitive_results": False,
                 "source": "flickr",
                 "creator": "nasa",
             },
@@ -821,21 +834,17 @@ DEFAULT_RANK_QUERY = [
                 ],
                 must_not=[{"term": {"mature": True}}],
             ),
-            id="filter_by_creator_without_sensitive",
+            id="filter_by_creator",
         ),
     ],
 )
 @mock.patch("api.controllers.search_controller.Search", wraps=Search)
 def test_build_collection_query(mock_search_class, data, expected_query):
-    # Setup
     mock_search = mock_search_class.return_value
-
-    search_params = image_serializers.ImageCollectionRequestSerializer(data)
+    search_params = image_serializers.ImageCollectionRequestSerializer(data=data)
     search_params.is_valid()
 
-    # Action
     build_collection_query(mock_search, search_params)
     actual_query = mock_search.query.call_args[0][0]
 
-    # Validate
     assert actual_query == expected_query

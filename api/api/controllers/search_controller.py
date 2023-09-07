@@ -525,7 +525,10 @@ def build_collection_query(
             search_query["filter"].append({"terms": {parameter: arguments}})
 
     # Exclude mature content and disabled sources
-    if not search_params.validated_data["include_sensitive_results"]:
+    include_sensitive_results = search_params.validated_data.get(
+        "include_sensitive_results", False
+    )
+    if not include_sensitive_results:
         search_query["must_not"].append({"term": {"mature": True}})
     if excluded_providers := get_excluded_providers():
         search_query["must_not"].append({"terms": {"provider": excluded_providers}})
