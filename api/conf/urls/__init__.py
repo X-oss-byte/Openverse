@@ -36,6 +36,3 @@ urlpatterns = [
     path("healthcheck/", HealthCheck.as_view(), name="health"),
     path("v1/", include(versioned_paths)),
 ]
-
-if settings.ENVIRONMENT == "local":
-    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
