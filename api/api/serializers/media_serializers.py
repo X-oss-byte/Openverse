@@ -426,10 +426,7 @@ class MediaCollectionRequestSerializer(MediaListRequestSerializer):
     def validate(self, data):
         data = super().validate(data)
         if "creator" in self.initial_data and "source" not in self.initial_data:
-            raise serializers.ValidationError(
-                "Cannot set `source` without `creator`. "
-                "Use both of these or neither of them."
-            )
+            raise serializers.ValidationError("Cannot set `creator` without `source`. ")
         if not data.get("source") and not data.get("creator") and not data.get("tag"):
             raise serializers.ValidationError(
                 "At least one of `source`, `creator` or `tag` must be "
