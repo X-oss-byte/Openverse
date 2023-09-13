@@ -1,6 +1,7 @@
 import { INCLUDE_SENSITIVE_QUERY_PARAM } from "~/constants/content-safety"
 
 export type Collection = "tag" | "creator" | "source"
+export type SearchStrategy = "default" | Collection
 
 /**
  * The filter query parameters.
@@ -39,3 +40,12 @@ export type SearchQuery = SearchFilterQuery & SearchRequestQuery
 export type PaginatedSearchQuery = SearchRequestQuery &
   PaginatedParams &
   SearchFilterQuery
+
+export type PaginatedCollectionQuery = PaginatedParams & {
+  [key: string]: string
+}
+
+export type CollectionParams =
+  | { tag: string }
+  | { source: string; creator: string }
+  | { source: string }

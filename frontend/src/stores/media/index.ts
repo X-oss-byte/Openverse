@@ -24,8 +24,6 @@ import { isSearchTypeSupported, useSearchStore } from "~/stores/search"
 import { useRelatedMediaStore } from "~/stores/media/related-media"
 import { deepFreeze } from "~/utils/deep-freeze"
 
-import { PaginatedSearchQuery } from "~/types/search"
-
 export type MediaStoreResult = {
   count: number
   pageCount: number
@@ -443,23 +441,19 @@ export const useMediaStore = defineStore("media", {
       mediaType: SupportedMediaType
       shouldPersistMedia: boolean
     }) {
-      const queryParams = useSearchStore()
-        .searchQueryParams as PaginatedSearchQuery
-      let page = 1
+      const searchStore = useSearchStore()
+      const { pathSlug, query } = searchStore.getSearchUrlParts(mediaType)
+
+      let page = shouldPersistMedia ? this.results[mediaType].page + 1 : 1
       if (shouldPersistMedia) {
-        /**
-         * If `shouldPersistMedia` is true, then we increment the page that was set by a previous
-         * fetch. Normally, if `shouldPersistMedia` is true, `page` should have been set to 1 by the
-         * previous fetch.
-         */
-        page = this.results[mediaType].page + 1
-        queryParams.page = `${page}`
+        // Page parameter is only necessary for pages after the first page.
+        query.page = `${page}`
       }
       this._updateFetchState(mediaType, "start")
       try {
         const accessToken = this.$nuxt.$openverseApiToken
         const service = initServices[mediaType](accessToken)
-        const data = await service.search(queryParams)
+        const data = await service.search(query, pathSlug)
         const mediaCount = data.result_count
         let errorData: FetchingError | undefined
         /**
@@ -469,11 +463,11 @@ export const useMediaStore = defineStore("media", {
         if (!mediaCount) {
           page = 0
           errorData = {
-            message: `No results found for ${queryParams.q}`,
+            message: `No results found for ${query.q}`,
             code: NO_RESULT,
             requestKind: "search",
             searchType: mediaType,
-            details: { searchTerm: queryParams.q ?? "" },
+            details: { searchTerm: query.q ?? "" },
           }
         }
         this._updateFetchState(mediaType, "end", errorData)
@@ -489,7 +483,7 @@ export const useMediaStore = defineStore("media", {
         return mediaCount
       } catch (error: unknown) {
         const errorData = parseFetchingError(error, mediaType, "search", {
-          searchTerm: queryParams.q ?? "",
+          searchTerm: query.q ?? "",
         })
 
         this._updateFetchState(mediaType, "end", errorData)
