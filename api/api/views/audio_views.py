@@ -6,15 +6,9 @@ from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, extend_schema_view
 
 from api.constants.media_types import AUDIO_TYPE
-from api.docs.audio_docs import (
-    detail,
-    related,
-    report,
-    search,
-    stats,
-    thumbnail,
-    waveform,
-)
+from api.docs.audio_docs import detail, related, report, search, stats
+from api.docs.audio_docs import thumbnail as thumbnail_docs
+from api.docs.audio_docs import waveform
 from api.models import Audio
 from api.serializers.audio_serializers import (
     AudioReportRequestSerializer,
@@ -22,7 +16,7 @@ from api.serializers.audio_serializers import (
     AudioSerializer,
     AudioWaveformSerializer,
 )
-from api.serializers.media_serializers import MediaThumbnailRequestSerializer
+from api.utils.image_proxy import ImageProxyMediaInfo
 from api.utils.throttle import AnonThumbnailRateThrottle, OAuth2IdThumbnailRateThrottle
 from api.views.media_views import MediaViewSet
 
@@ -48,21 +42,8 @@ class AudioViewSet(MediaViewSet):
 
     # Extra actions
 
-    @thumbnail
-    @action(
-        detail=True,
-        url_path="thumb",
-        url_name="thumb",
-        serializer_class=MediaThumbnailRequestSerializer,
-        throttle_classes=[AnonThumbnailRateThrottle, OAuth2IdThumbnailRateThrottle],
-    )
-    def thumbnail(self, request, *_, **__):
-        """
-        Retrieve the scaled down and compressed thumbnail of the artwork of an
-        audio track or its audio set.
-        """
-
-        audio = self.get_object()
+    async def get_image_proxy_media_info(self) -> ImageProxyMediaInfo:
+        audio = await self.aget_object()
 
         image_url = None
         if audio_thumbnail := audio.thumbnail:
@@ -72,7 +53,12 @@ class AudioViewSet(MediaViewSet):
         if not image_url:
             raise NotFound("Could not find artwork.")
 
-        return super().thumbnail(request, audio, image_url)
+        return ImageProxyMediaInfo(
+            media_identifier=audio.identifier,
+            image_url=image_url,
+        )
+
+    thumbnail = thumbnail_docs(MediaViewSet.thumbnail)
 
     @waveform
     @action(

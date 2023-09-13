@@ -1,4 +1,5 @@
 import logging
+from dataclasses import asdict, dataclass
 from typing import Literal
 from urllib.parse import urlparse
 
@@ -33,13 +34,25 @@ ORIGINAL = "original"
 THUMBNAIL_STRATEGY = Literal["photon_proxy", "original"]
 
 
+@dataclass
+class ImageProxyMediaInfo:
+    media_identifier: str
+    image_url: str
+
+
+@dataclass
+class ImageProxyConfig:
+    accept_header: str = "image/*"
+    is_full_size: bool = False
+    is_compressed: bool = True
+
+
 def get_request_params_for_extension(
     ext: str,
     headers: dict[str, str],
     image_url: str,
     parsed_image_url: urlparse,
-    is_full_size: bool,
-    is_compressed: bool,
+    proxy_config: ImageProxyConfig,
 ) -> tuple[str, dict[str, str], dict[str, str]]:
     """
     Get the request params (url, params, headers) for the thumbnail proxy.
@@ -49,7 +62,10 @@ def get_request_params_for_extension(
     """
     if ext in PHOTON_TYPES:
         return get_photon_request_params(
-            parsed_image_url, is_full_size, is_compressed, headers
+            parsed_image_url,
+            proxy_config.is_full_size,
+            proxy_config.is_compressed,
+            headers,
         )
     elif ext in ORIGINAL_TYPES:
         return image_url, {}, headers
@@ -59,23 +75,23 @@ def get_request_params_for_extension(
 
 
 def get(
-    image_url: str,
-    media_identifier: str,
-    accept_header: str = "image/*",
-    is_full_size: bool = False,
-    is_compressed: bool = True,
+    media_info: ImageProxyMediaInfo,
+    proxy_config: ImageProxyConfig = ImageProxyConfig(),
 ) -> HttpResponse:
     """
     Proxy an image through Photon if its file type is supported, else return the
     original image if the file type is SVG. Otherwise, raise an exception.
     """
+    image_url = media_info.image_url
+    media_identifier = media_info.media_identifier
+
     logger = parent_logger.getChild("get")
     tallies = django_redis.get_redis_connection("tallies")
     month = get_monthly_timestamp()
 
     image_extension = get_image_extension(image_url, media_identifier)
 
-    headers = {"Accept": accept_header} | HEADERS
+    headers = {"Accept": proxy_config.accept_header} | HEADERS
 
     parsed_image_url = urlparse(image_url)
     domain = parsed_image_url.netloc
@@ -85,8 +101,7 @@ def get(
         headers,
         image_url,
         parsed_image_url,
-        is_full_size,
-        is_compressed,
+        proxy_config,
     )
 
     try:

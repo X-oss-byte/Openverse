@@ -3,10 +3,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from test.factory.models.image import ImageFactory
-from unittest.mock import ANY, patch
 
-from django.http import HttpResponse
-
+import pook
 import pytest
 from requests import Request, Response
 
@@ -34,7 +32,7 @@ class RequestsFixture:
         return res
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def requests(monkeypatch) -> RequestsFixture:
     fixture = RequestsFixture([])
 
@@ -67,15 +65,24 @@ def test_oembed_sends_ua_header(api_client, requests):
     [(True, "http://iip.smk.dk/thumb.jpg"), (False, "http://iip.smk.dk/image.jpg")],
 )
 def test_thumbnail_uses_upstream_thumb_for_smk(
-    api_client, smk_has_thumb, expected_thumb_url
+    api_client, smk_has_thumb, expected_thumb_url, settings
 ):
     thumb_url = "http://iip.smk.dk/thumb.jpg" if smk_has_thumb else None
     image = ImageFactory.create(
         url="http://iip.smk.dk/image.jpg",
         thumbnail=thumb_url,
     )
-    with patch("api.views.media_views.MediaViewSet.thumbnail") as thumb_call:
-        mock_response = HttpResponse("mock_response")
-        thumb_call.return_value = mock_response
-        api_client.get(f"/v1/images/{image.identifier}/thumb/")
-    thumb_call.assert_called_once_with(ANY, image, expected_thumb_url)
+
+    with pook.use():
+        mock_get = (
+            # Pook interprets a trailing slash on the URL as the path,
+            # so strip that so the `path` matcher works
+            pook.get(settings.PHOTON_ENDPOINT[:-1])
+            .path(expected_thumb_url.replace("http://", "/"))
+            .response(200)
+        ).mock
+
+        response = api_client.get(f"/v1/images/{image.identifier}/thumb/")
+
+    assert response.status_code == 200
+    assert mock_get.matched is True

@@ -12,15 +12,8 @@ from drf_spectacular.utils import extend_schema, extend_schema_view
 from PIL import Image as PILImage
 
 from api.constants.media_types import IMAGE_TYPE
-from api.docs.image_docs import (
-    detail,
-    oembed,
-    related,
-    report,
-    search,
-    stats,
-    thumbnail,
-)
+from api.docs.image_docs import detail, oembed, related, report, search, stats
+from api.docs.image_docs import thumbnail as thumbnail_docs
 from api.docs.image_docs import watermark as watermark_doc
 from api.models import Image
 from api.serializers.image_serializers import (
@@ -31,8 +24,7 @@ from api.serializers.image_serializers import (
     OembedSerializer,
     WatermarkRequestSerializer,
 )
-from api.serializers.media_serializers import MediaThumbnailRequestSerializer
-from api.utils.throttle import AnonThumbnailRateThrottle, OAuth2IdThumbnailRateThrottle
+from api.utils.image_proxy import ImageProxyMediaInfo
 from api.utils.watermark import watermark
 from api.views.media_views import MediaViewSet
 
@@ -99,25 +91,19 @@ class ImageViewSet(MediaViewSet):
         serializer = self.get_serializer(image, context=context)
         return Response(data=serializer.data)
 
-    @thumbnail
-    @action(
-        detail=True,
-        url_path="thumb",
-        url_name="thumb",
-        serializer_class=MediaThumbnailRequestSerializer,
-        throttle_classes=[AnonThumbnailRateThrottle, OAuth2IdThumbnailRateThrottle],
-    )
-    def thumbnail(self, request, *_, **__):
-        """Retrieve the scaled down and compressed thumbnail of the image."""
-
-        image = self.get_object()
+    async def get_image_proxy_media_info(self) -> ImageProxyMediaInfo:
+        image = await self.aget_object()
         image_url = image.url
         # Hotfix to use thumbnails for SMK images
         # TODO: Remove when small thumbnail issues are resolved
         if "iip.smk.dk" in image_url and image.thumbnail:
             image_url = image.thumbnail
 
-        return super().thumbnail(request, image, image_url)
+        return ImageProxyMediaInfo(
+            media_identifier=image.identifier, image_url=image_url
+        )
+
+    thumbnail = thumbnail_docs(MediaViewSet.thumbnail)
 
     @watermark_doc
     @action(detail=True, url_path="watermark", url_name="watermark")
