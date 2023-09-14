@@ -26,16 +26,12 @@ from api.serializers.media_serializers import (
 AudioSearchRequestSourceSerializer = get_search_request_source_serializer("audio")
 
 
-class AudioListRequestSerializer(
-    AudioSearchRequestSourceSerializer,
-    MediaListRequestSerializer,
-):
-    """Parse and validate search query string parameters."""
+class AudioListRequestSerializer(MediaListRequestSerializer):
+    """Parse and validate audio list path and query string parameters."""
 
     media_type = AUDIO_TYPE
     fields_names = [
         *MediaListRequestSerializer.fields_names,
-        *AudioSearchRequestSourceSerializer.field_names,
         "category",
         "length",
     ]

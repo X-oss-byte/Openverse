@@ -30,7 +30,7 @@ ImageSearchRequestSourceSerializer = get_search_request_source_serializer("image
 
 
 class ImageListRequestSerializer(MediaListRequestSerializer):
-    """Parse and validate search query string parameters."""
+    """Parse and validate image list path and query string parameters."""
 
     media_type = IMAGE_TYPE
     fields_names = [
@@ -67,6 +67,8 @@ class ImageSearchRequestSerializer(
     ImageSearchRequestSourceSerializer,
     MediaSearchRequestSerializer,
 ):
+    """Parse and validate search query string parameters."""
+
     fields_names = [
         *MediaSearchRequestSerializer.fields_names,
         *ImageSearchRequestSourceSerializer.field_names,
@@ -75,7 +77,8 @@ class ImageSearchRequestSerializer(
 
 
 class ImageCollectionRequestSerializer(
-    ImageListRequestSerializer, MediaCollectionRequestSerializer
+    ImageListRequestSerializer,
+    MediaCollectionRequestSerializer,
 ):
     fields_names = [
         *MediaCollectionRequestSerializer.fields_names,
