@@ -1,5 +1,4 @@
 import logging
-from typing import Literal
 
 from rest_framework import status
 from rest_framework.decorators import action
@@ -7,6 +6,7 @@ from rest_framework.exceptions import APIException
 from rest_framework.response import Response
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
+from api.constants.search import ListView
 from api.controllers import search_controller
 from api.models import ContentProvider
 from api.models.media import AbstractMedia
@@ -66,9 +66,7 @@ class MediaViewSet(ReadOnlyModelViewSet):
             ).values_list("provider_identifier")
         )
 
-    def get_serializer_context(
-        self, strategy: Literal["search", "collection"] = "search"
-    ):
+    def get_serializer_context(self, strategy: ListView = "search"):
         context = super().get_serializer_context()
         req_serializer = self._get_request_serializer(self.request, strategy)
         context.update({"validated_data": req_serializer.validated_data})
@@ -77,7 +75,7 @@ class MediaViewSet(ReadOnlyModelViewSet):
     def _get_request_serializer(
         self,
         request,
-        strategy: Literal["search", "collection"],
+        strategy: ListView,
         additional_context=None,
     ):
         query_serializer_class = (
@@ -175,7 +173,7 @@ class MediaViewSet(ReadOnlyModelViewSet):
     def get_media_results(
         self,
         request,
-        strategy: Literal["search", "collection"],
+        strategy: ListView,
         params: MediaSearchRequestSerializer | MediaCollectionRequestSerializer,
     ):
         page_size = self.paginator.page_size = params.data["page_size"]

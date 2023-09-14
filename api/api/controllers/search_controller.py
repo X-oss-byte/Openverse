@@ -16,6 +16,7 @@ from elasticsearch_dsl.response import Hit, Response
 
 import api.models as models
 from api.constants.media_types import OriginIndex, SearchIndex
+from api.constants.search import ListView
 from api.constants.sorting import INDEXED_ON
 from api.serializers import media_serializers
 from api.utils import tallies
@@ -308,7 +309,7 @@ def _resolve_index(
 
 
 def query_media(
-    strategy: Literal["search", "collection"],
+    strategy: ListView,
     search_params: media_serializers.MediaSearchRequestSerializer
     | media_serializers.MediaCollectionRequestSerializer,
     origin_index: OriginIndex,
