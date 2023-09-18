@@ -13,12 +13,15 @@ from PIL import Image as PILImage
 
 from api.constants.media_types import IMAGE_TYPE
 from api.docs.image_docs import (
+    creator,
     detail,
     oembed,
     related,
     report,
     search,
+    source,
     stats,
+    tag,
     thumbnail,
 )
 from api.docs.image_docs import watermark as watermark_doc
@@ -63,6 +66,49 @@ class ImageViewSet(MediaViewSet):
         return super().get_queryset().select_related("mature_image")
 
     # Extra actions
+    @creator
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="source/(?P<source>[^/.]+)/creator/(?P<creator>.+)",
+    )
+    def creator_collection(self, *args, **kwargs):
+        """
+        Get a collection of images by a specific creator from the specified source.
+
+        The images in the collection will be sorted by the order in which they were
+        added to Openverse.
+        """
+        return super().creator_collection(*args, **kwargs)
+
+    @source
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="source/(?P<source>[^/.]+)",
+    )
+    def source_collection(self, *args, **kwargs):
+        """
+        Get a collection of images from a specific source.
+
+        The images in the collection will be sorted by the order in which they were
+        added to Openverse.
+        """
+        return super().creator_collection(*args, **kwargs)
+
+    @tag
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="tag/(?P<tag>[^/.]+)",
+    )
+    def tag_collection(self, *args, **kwargs):
+        """
+        Get a collection of images with a specific tag.
+
+        The images in the collection will be ranked by their popularity and authority.
+        """
+        return super().tag_collection(*args, **kwargs)
 
     @oembed
     @action(

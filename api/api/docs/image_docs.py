@@ -1,4 +1,4 @@
-from drf_spectacular.utils import OpenApiResponse, extend_schema
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 
 from api.docs.base_docs import custom_extend_schema, fields_to_md
 from api.examples import (
@@ -24,6 +24,7 @@ from api.serializers.error_serializers import (
     NotFoundErrorSerializer,
 )
 from api.serializers.image_serializers import (
+    ImageListRequestSerializer,
     ImageReportRequestSerializer,
     ImageSearchRequestSerializer,
     ImageSerializer,
@@ -121,4 +122,55 @@ oembed = custom_extend_schema(
 
 watermark = custom_extend_schema(
     deprecated=True,
+)
+
+IMAGE_SOURCE_DESCRIPTION = (
+    "The source of the image. Valid values for `source` are `source_name`s "
+    "from the stats endpoint: https://api.openverse.engineering/v1/images/stats/"
+)
+
+collection_responses = {
+    "responses": {200: ImageSerializer(many=True), 404: NotFoundErrorSerializer}
+}
+
+
+def create_collection_parameters(tags: list[dict]):
+    return [
+        ImageListRequestSerializer,
+        *[
+            OpenApiParameter(
+                name=t["name"], type=str, location="path", description=t["description"]
+            )
+            for t in tags
+        ],
+    ]
+
+
+tag = extend_schema(
+    **collection_responses,
+    parameters=create_collection_parameters(
+        [
+            {
+                "name": "tag",
+                "description": "The tag for which images are to be retrieved.",
+            }
+        ]
+    ),
+)
+
+source = extend_schema(
+    **collection_responses,
+    parameters=create_collection_parameters(
+        [{"name": "source", "description": IMAGE_SOURCE_DESCRIPTION}]
+    ),
+)
+
+creator = extend_schema(
+    **collection_responses,
+    parameters=create_collection_parameters(
+        [
+            {"name": "creator", "description": "The creator of the image."},
+            {"name": "source", "description": IMAGE_SOURCE_DESCRIPTION},
+        ]
+    ),
 )

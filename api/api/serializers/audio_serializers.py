@@ -79,6 +79,8 @@ class AudioCollectionRequestSerializer(
     AudioListRequestSerializer,
     MediaCollectionRequestSerializer,
 ):
+    """Parse and validate collection path and query string parameters."""
+
     fields_names = [
         *MediaCollectionRequestSerializer.fields_names,
         *AudioListRequestSerializer.fields_names,

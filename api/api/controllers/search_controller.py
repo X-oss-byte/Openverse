@@ -311,7 +311,7 @@ def _resolve_index(
 def query_media(
     strategy: ListView,
     search_params: media_serializers.MediaSearchRequestSerializer
-    | media_serializers.MediaCollectionRequestSerializer,
+    | media_serializers.MediaListRequestSerializer,
     origin_index: OriginIndex,
     exact_index: bool,
     page_size: int,
@@ -483,7 +483,7 @@ def build_search_query(
 
 def build_collection_query(
     s: Search,
-    search_params: media_serializers.MediaCollectionRequestSerializer,
+    search_params: media_serializers.MediaListRequestSerializer,
 ):
     """
     Build the query to retrieve all the items in a collection.

@@ -11,7 +11,7 @@ from api.controllers import search_controller
 from api.models import ContentProvider
 from api.models.media import AbstractMedia
 from api.serializers.media_serializers import (
-    MediaCollectionRequestSerializer,
+    MediaListRequestSerializer,
     MediaSearchRequestSerializer,
 )
 from api.serializers.provider_serializers import ProviderSerializer
@@ -139,7 +139,7 @@ class MediaViewSet(ReadOnlyModelViewSet):
         """
         Retrieve a collection of media tagged with specific tag.
 
-        The media in the collection will be ranked according to the popularity at
+        The media in the collection is ranked according to the popularity at
         the source and also boosted by `unstable__authority` parameter.
         """
         return self.collection(request, tag, None, None)
@@ -157,7 +157,7 @@ class MediaViewSet(ReadOnlyModelViewSet):
     @action(
         detail=False,
         methods=["get"],
-        url_path="source/(?P<source>[^/.]+)/creator/(?P<creator>[^/.]+)",
+        url_path="source/(?P<source>[^/.]+)/creator/(?P<creator>.+)",
     )
     def creator_collection(self, request, source, creator):
         """
@@ -174,7 +174,7 @@ class MediaViewSet(ReadOnlyModelViewSet):
         self,
         request,
         strategy: ListView,
-        params: MediaSearchRequestSerializer | MediaCollectionRequestSerializer,
+        params: MediaSearchRequestSerializer | MediaListRequestSerializer,
     ):
         page_size = self.paginator.page_size = params.data["page_size"]
         page = self.paginator.page = params.data["page"]

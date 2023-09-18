@@ -70,9 +70,9 @@ class ImageSearchRequestSerializer(
     """Parse and validate search query string parameters."""
 
     fields_names = [
+        *ImageListRequestSerializer.fields_names,
         *MediaSearchRequestSerializer.fields_names,
         *ImageSearchRequestSourceSerializer.field_names,
-        *ImageListRequestSerializer.fields_names,
     ]
 
 
@@ -80,6 +80,8 @@ class ImageCollectionRequestSerializer(
     ImageListRequestSerializer,
     MediaCollectionRequestSerializer,
 ):
+    """Parse and validate collection path and query string parameters."""
+
     fields_names = [
         *MediaCollectionRequestSerializer.fields_names,
         *ImageListRequestSerializer.fields_names,

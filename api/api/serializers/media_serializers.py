@@ -295,18 +295,6 @@ class MediaListRequestSerializer(serializers.Serializer):
         return False
 
 
-@extend_schema_serializer(
-    # Hide unstable and internal fields from documentation.
-    # Also see `field_names` below.
-    exclude_fields=[
-        "unstable__sort_by",
-        "unstable__sort_dir",
-        "unstable__authority",
-        "unstable__authority_boost",
-        "unstable__include_sensitive_results",
-        "internal__index",
-    ],
-)
 class MediaSearchRequestSerializer(MediaListRequestSerializer):
     """This serializer parses and validates search query string parameters."""
 
@@ -360,8 +348,6 @@ class MediaSearchRequestSerializer(MediaListRequestSerializer):
 
 
 @extend_schema_serializer(
-    # Hide unstable and internal fields from documentation.
-    # Also see `field_names` below.
     exclude_fields=[
         "unstable__sort_by",
         "unstable__sort_dir",
@@ -369,22 +355,19 @@ class MediaSearchRequestSerializer(MediaListRequestSerializer):
         "unstable__authority_boost",
         "unstable__include_sensitive_results",
         "internal__index",
+        # These are path parameters, not query parameters.
+        "source",
+        "creator",
+        "tag",
     ],
 )
 class MediaCollectionRequestSerializer(MediaListRequestSerializer):
-    """This serializer parses and validates collection path and query parameters."""
-
     fields_names = [
         *MediaListRequestSerializer.fields_names,
         "source",
         "creator",
         "tag",
     ]
-    """
-    Keep the fields names in sync with the actual fields below as this list is
-    used to generate Swagger documentation.
-    """
-
     tag = serializers.CharField(
         label="tag",
         help_text="Get the collection for selected tag.",
@@ -422,17 +405,6 @@ class MediaCollectionRequestSerializer(MediaListRequestSerializer):
                 f"Invalid source `{value}`. Allowed sources are: {allowed_sources}."
             )
         return source
-
-    def validate(self, data):
-        data = super().validate(data)
-        if "creator" in self.initial_data and "source" not in self.initial_data:
-            raise serializers.ValidationError("Cannot set `creator` without `source`. ")
-        if not data.get("source") and not data.get("creator") and not data.get("tag"):
-            raise serializers.ValidationError(
-                "At least one of `source`, `creator` or `tag` must be "
-                "set for a collection view."
-            )
-        return data
 
 
 class MediaThumbnailRequestSerializer(serializers.Serializer):
