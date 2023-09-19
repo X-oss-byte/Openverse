@@ -146,7 +146,7 @@ def create_collection_parameters(tags: list[dict]):
     ]
 
 
-tag = extend_schema(
+tag_collection = extend_schema(
     **collection_responses,
     parameters=create_collection_parameters(
         [
@@ -158,14 +158,14 @@ tag = extend_schema(
     ),
 )
 
-source = extend_schema(
+source_collection = extend_schema(
     **collection_responses,
     parameters=create_collection_parameters(
         [{"name": "source", "description": IMAGE_SOURCE_DESCRIPTION}]
     ),
 )
 
-creator = extend_schema(
+creator_collection = extend_schema(
     **collection_responses,
     parameters=create_collection_parameters(
         [

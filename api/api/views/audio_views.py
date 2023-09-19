@@ -7,14 +7,14 @@ from drf_spectacular.utils import extend_schema, extend_schema_view
 
 from api.constants.media_types import AUDIO_TYPE
 from api.docs.audio_docs import (
-    creator,
+    creator_collection,
     detail,
     related,
     report,
     search,
-    source,
+    source_collection,
     stats,
-    tag,
+    tag_collection,
     thumbnail,
     waveform,
 )
@@ -53,22 +53,22 @@ class AudioViewSet(MediaViewSet):
 
     # Extra actions
 
-    @creator
+    @creator_collection
     @action(
         detail=False,
         methods=["get"],
         url_path="source/(?P<source>[^/.]+)/creator/(?P<creator>.+)",
     )
-    def creator_collection(self, *args, **kwargs):
+    def creator_collection(self, request, source, creator):
         """
         Get a collection of audio items by a specific creator from the specified source.
 
         The items in the collection will be sorted by the order in which they were
         added to Openverse.
         """
-        return super().creator_collection(*args, **kwargs)
+        return super().creator_collection(request, source, creator)
 
-    @source
+    @source_collection
     @action(
         detail=False,
         methods=["get"],
@@ -83,19 +83,19 @@ class AudioViewSet(MediaViewSet):
         """
         return super().creator_collection(*args, **kwargs)
 
-    @tag
+    @tag_collection
     @action(
         detail=False,
         methods=["get"],
         url_path="tag/(?P<tag>[^/.]+)",
     )
-    def tag_collection(self, *args, **kwargs):
+    def tag_collection(self, request, tag, *_, **__):
         """
         Get a collection of audio items with a specific tag.
 
         The items will be ranked by their popularity and authority.
         """
-        return super().tag_collection(*args, **kwargs)
+        return super().tag_collection(request, tag, *_, **__)
 
     @thumbnail
     @action(
