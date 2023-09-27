@@ -1,4 +1,5 @@
 import logging
+from typing import Literal
 
 from rest_framework import status
 from rest_framework.decorators import action
@@ -10,9 +11,10 @@ from api.constants.search import ListView
 from api.controllers import search_controller
 from api.models import ContentProvider
 from api.models.media import AbstractMedia
+from api.serializers.audio_serializers import AudioCollectionRequestSerializer
 from api.serializers.media_serializers import (
-    MediaListRequestSerializer,
     MediaSearchRequestSerializer,
+    PaginatedRequestSerializer,
 )
 from api.serializers.provider_serializers import ProviderSerializer
 from api.utils import image_proxy
@@ -21,6 +23,12 @@ from api.utils.search_context import SearchContext
 
 
 logger = logging.getLogger(__name__)
+
+
+class InvalidSource(APIException):
+    status_code = 404
+    default_detail = "Invalid source."
+    default_code = "invalid_source"
 
 
 class MediaViewSet(ReadOnlyModelViewSet):
@@ -34,16 +42,17 @@ class MediaViewSet(ReadOnlyModelViewSet):
 
     # Populate these in the corresponding subclass
     model_class: type[AbstractMedia] = None
-    search_query_serializer_class = None
-    collection_serializer_class = None
+    media_type: Literal["image", "audio"] | None = None
+    query_serializer_class = None
+    collection_serializer_class = PaginatedRequestSerializer
     default_index = None
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         required_fields = [
             self.model_class,
-            self.search_query_serializer_class,
-            self.collection_serializer_class,
+            self.media_type,
+            self.query_serializer_class,
             self.default_index,
         ]
         if any(val is None for val in required_fields):
@@ -66,28 +75,15 @@ class MediaViewSet(ReadOnlyModelViewSet):
             ).values_list("provider_identifier")
         )
 
-    def get_serializer_context(self, strategy: ListView = "search"):
+    def get_serializer_context(self):
         context = super().get_serializer_context()
-        req_serializer = self._get_request_serializer(self.request, strategy)
+        req_serializer = self._get_request_serializer(self.request)
         context.update({"validated_data": req_serializer.validated_data})
         return context
 
-    def _get_request_serializer(
-        self,
-        request,
-        strategy: ListView,
-        additional_context=None,
-    ):
-        query_serializer_class = (
-            self.search_query_serializer_class
-            if strategy == "search"
-            else self.collection_serializer_class
-        )
-        serializer_data = request.query_params
-        if additional_context:
-            serializer_data |= additional_context
-        req_serializer = query_serializer_class(
-            data=serializer_data, context={"request": request}
+    def _get_request_serializer(self, request):
+        req_serializer = self.query_serializer_class(
+            data=request.query_params, context={"request": request}
         )
         req_serializer.is_valid(raise_exception=True)
         return req_serializer
@@ -119,39 +115,40 @@ class MediaViewSet(ReadOnlyModelViewSet):
         return Response(serializer.data)
 
     def list(self, request, *_, **__):
-        params = self._get_request_serializer(request, strategy="search")
+        params = self._get_request_serializer(request)
         return self.get_media_results(request, "search", params)
+
+    def _validate_source(self, source):
+        valid_sources = search_controller.get_sources(self.media_type)
+        if source not in valid_sources:
+            valid_string = ", ".join([f"'{k}'" for k in valid_sources.keys()])
+            raise InvalidSource(
+                detail=f"Invalid source '{source}'. Valid sources are: {valid_string}.",
+            )
 
     def collection(self, request, tag, source, creator, *_, **__):
         if tag:
-            collection_params = {"tag": [tag]}
+            collection_params = {"tag": tag}
         elif creator:
-            collection_params = {"creator": [creator], "source": [source]}
+            collection_params = {"creator": creator, "source": source}
         else:
-            collection_params = {"source": [source]}
-        params = self._get_request_serializer(
-            request, strategy="collection", additional_context=collection_params
+            collection_params = {"source": source}
+        if source:
+            self._validate_source(source)
+
+        params = self.collection_serializer_class(
+            data=request.query_params, context={"request": request}
         )
-        return self.get_media_results(request, "collection", params)
+        params.is_valid(raise_exception=True)
+
+        return self.get_media_results(request, "collection", params, collection_params)
 
     @action(detail=False, methods=["get"], url_path="tag/(?P<tag>[^/.]+)")
     def tag_collection(self, request, tag, *_, **__):
-        """
-        Retrieve a collection of media tagged with specific tag.
-
-        The media in the collection is ranked according to the popularity at
-        the source and also boosted by `unstable__authority` parameter.
-        """
         return self.collection(request, tag, None, None)
 
     @action(detail=False, methods=["get"], url_path="source/(?P<source>[^/.]+)")
     def source_collection(self, request, source, *_, **__):
-        """
-        Retrieve a collection of media from a specific source.
-
-        The media in the collection will be sorted by the order in which they were
-        added to Openverse.
-        """
         return self.collection(request, None, source, None)
 
     @action(
@@ -160,12 +157,6 @@ class MediaViewSet(ReadOnlyModelViewSet):
         url_path="source/(?P<source>[^/.]+)/creator/(?P<creator>.+)",
     )
     def creator_collection(self, request, source, creator):
-        """
-        Retrieve a collection of media from a specific creator at the specified source.
-
-        The media in the collection will be sorted by the order in which they were
-        added to Openverse.
-        """
         return self.collection(request, None, source, creator)
 
     # Common functionality for search and collection views
@@ -174,13 +165,16 @@ class MediaViewSet(ReadOnlyModelViewSet):
         self,
         request,
         strategy: ListView,
-        params: MediaSearchRequestSerializer | MediaListRequestSerializer,
+        params: MediaSearchRequestSerializer
+        | PaginatedRequestSerializer
+        | AudioCollectionRequestSerializer,
+        collection_params: dict[str, str] | None = None,
     ):
         page_size = self.paginator.page_size = params.data["page_size"]
         page = self.paginator.page = params.data["page"]
 
         hashed_ip = hash(self._get_user_ip(request))
-        filter_dead = params.validated_data["filter_dead"]
+        filter_dead = params.validated_data.get("filter_dead", True)
 
         if pref_index := params.validated_data.get("index"):
             logger.info(f"Using preferred index {pref_index} for media.")
@@ -200,6 +194,7 @@ class MediaViewSet(ReadOnlyModelViewSet):
             ) = search_controller.query_media(
                 strategy,
                 params,
+                collection_params,
                 search_index,
                 exact_index,
                 page_size,
@@ -212,9 +207,7 @@ class MediaViewSet(ReadOnlyModelViewSet):
         except ValueError as e:
             raise APIException(getattr(e, "message", str(e)))
 
-        serializer_context = search_context | self.get_serializer_context(
-            strategy=strategy
-        )
+        serializer_context = search_context | self.get_serializer_context()
 
         serializer_class = self.get_serializer()
         if params.needs_db or serializer_class.needs_db:

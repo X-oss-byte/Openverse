@@ -10,8 +10,6 @@ from api.models import Image, ImageReport
 from api.serializers.base import BaseModelSerializer
 from api.serializers.fields import EnumCharField
 from api.serializers.media_serializers import (
-    MediaCollectionRequestSerializer,
-    MediaListRequestSerializer,
     MediaReportRequestSerializer,
     MediaSearchRequestSerializer,
     MediaSerializer,
@@ -29,12 +27,15 @@ from api.utils.url import add_protocol
 ImageSearchRequestSourceSerializer = get_search_request_source_serializer("image")
 
 
-class ImageListRequestSerializer(MediaListRequestSerializer):
-    """Parse and validate image list path and query string parameters."""
+class ImageSearchRequestSerializer(
+    ImageSearchRequestSourceSerializer,
+    MediaSearchRequestSerializer,
+):
+    """Parse and validate search query string parameters."""
 
-    media_type = IMAGE_TYPE
     fields_names = [
-        *MediaListRequestSerializer.fields_names,
+        *MediaSearchRequestSerializer.fields_names,
+        *ImageSearchRequestSourceSerializer.field_names,
         "category",
         "aspect_ratio",
         "size",
@@ -61,31 +62,13 @@ class ImageListRequestSerializer(MediaListRequestSerializer):
         required=False,
     )
 
-
-class ImageSearchRequestSerializer(
-    ImageListRequestSerializer,
-    ImageSearchRequestSourceSerializer,
-    MediaSearchRequestSerializer,
-):
-    """Parse and validate search query string parameters."""
-
-    fields_names = [
-        *ImageListRequestSerializer.fields_names,
-        *MediaSearchRequestSerializer.fields_names,
-        *ImageSearchRequestSourceSerializer.field_names,
-    ]
-
-
-class ImageCollectionRequestSerializer(
-    ImageListRequestSerializer,
-    MediaCollectionRequestSerializer,
-):
-    """Parse and validate collection path and query string parameters."""
-
-    fields_names = [
-        *MediaCollectionRequestSerializer.fields_names,
-        *ImageListRequestSerializer.fields_names,
-    ]
+    def validate_internal__index(self, value):
+        index = super().validate_internal__index(value)
+        if index is None:
+            return None
+        if not index.startswith(IMAGE_TYPE):
+            raise serializers.ValidationError(f"Invalid index name `{value}`.")
+        return index
 
 
 class ImageReportRequestSerializer(MediaReportRequestSerializer):

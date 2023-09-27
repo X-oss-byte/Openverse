@@ -18,7 +18,7 @@ import api.models as models
 from api.constants.media_types import OriginIndex, SearchIndex
 from api.constants.search import ListView
 from api.constants.sorting import INDEXED_ON
-from api.serializers import media_serializers
+from api.serializers import audio_serializers, media_serializers
 from api.utils import tallies
 from api.utils.check_dead_links import check_dead_links
 from api.utils.dead_link_mask import get_query_hash, get_query_mask
@@ -294,12 +294,12 @@ def _exclude_sensitive_by_param(s: Search, search_params):
 
 def _resolve_index(
     index: Literal["image", "audio"],
-    search_params: media_serializers.MediaSearchRequestSerializer,
+    include_sensitive_results: bool,
 ) -> SearchIndex:
     use_filtered_index = all(
         (
             settings.ENABLE_FILTERED_INDEX_QUERIES,
-            not search_params.validated_data["include_sensitive_results"],
+            not include_sensitive_results,
         )
     )
     if use_filtered_index:
@@ -311,7 +311,9 @@ def _resolve_index(
 def query_media(
     strategy: ListView,
     search_params: media_serializers.MediaSearchRequestSerializer
-    | media_serializers.MediaListRequestSerializer,
+    | media_serializers.PaginatedRequestSerializer
+    | audio_serializers.AudioCollectionRequestSerializer,
+    collection_params: dict[str, str] | None,
     origin_index: OriginIndex,
     exact_index: bool,
     page_size: int,
@@ -325,6 +327,8 @@ def query_media(
     If ``strategy`` is ``collection``, perform a paginated search
     for the `tag`, `source` or `source` and `creator` combination.
 
+    :param collection_params: The path parameters for collection search, if
+    strategy is ``collection``.
     :param strategy: Whether to perform a default search or retrieve a collection.
     :param search_params: Search parameters. See
      :class: `ImageSearchQueryStringSerializer`.
@@ -340,14 +344,17 @@ def query_media(
     pages, the number of results, and the ``SearchContext`` as a dict.
     """
     if not exact_index:
-        index = _resolve_index(origin_index, search_params)
+        index = _resolve_index(
+            origin_index,
+            search_params.validated_data.get("include_sensitive_results", False),
+        )
     else:
         index = origin_index
 
     search_client = Search(index=index)
 
     if strategy == "collection":
-        s = build_collection_query(search_client, search_params)
+        s = build_collection_query(search_client, search_params, collection_params)
     else:
         s = build_search_query(search_client, search_params)
     # Route users to the same Elasticsearch worker node to reduce
@@ -359,7 +366,13 @@ def query_media(
         strategy == "collection"
         or search_params.validated_data["sort_by"] == INDEXED_ON
     ):
-        s = s.sort({"created_on": {"order": search_params.validated_data["sort_dir"]}})
+        s = s.sort(
+            {
+                "created_on": {
+                    "order": search_params.validated_data.get("sort_dir", "desc")
+                }
+            }
+        )
 
     # Execute paginated search
     page_count, result_count, results = execute_search(s, page, page_size, filter_dead)
@@ -483,11 +496,13 @@ def build_search_query(
 
 def build_collection_query(
     s: Search,
-    search_params: media_serializers.MediaListRequestSerializer,
+    search_params: media_serializers.PaginatedRequestSerializer,
+    collection_params: dict[str, str],
 ):
     """
     Build the query to retrieve all the items in a collection.
     The common filters, e.g. license or category, are also applied.
+    :param collection_params: `tag`, `source` and/or `creator` values from the path.
     :param s: the search client to build the query for.
     :param search_params: the validated search parameters.
     :return: the search client with the query applied.
@@ -499,27 +514,16 @@ def build_collection_query(
     # filter accepts multiple comma-separated values.
     filters = [
         # Collection filters allow a single value.
-        ("tag", "tags.name.keyword", False),
-        ("source", "source.keyword", False),
-        ("creator", "creator.keyword", False),
-        # The following filters allow multiple comma-separated values.
-        ("license", "license.keyword", True),
-        ("license_type", "license.keyword", True),
-        ("extension", None, True),
-        ("category", None, True),
-        ("categories", "category", True),
-        ("length", None, True),
-        ("aspect_ratio", None, True),
-        ("size", None, True),
+        ("tag", "tags.name.keyword"),
+        ("source", "source.keyword"),
+        ("creator", "creator.keyword"),
     ]
-    for serializer_field, es_field, allow_multiple in filters:
-        if serializer_field in search_params.data:
-            arguments = search_params.data.get(serializer_field)
-            if not arguments:
+    for serializer_field, es_field in filters:
+        if serializer_field in collection_params:
+            if not (argument := collection_params.get(serializer_field)):
                 continue
-            arguments = arguments.split(",") if allow_multiple else [arguments]
             parameter = es_field or serializer_field
-            search_query["filter"].append({"terms": {parameter: arguments}})
+            search_query["filter"].append({"term": {parameter: argument}})
 
     # Exclude mature content and disabled sources
     include_sensitive_results = search_params.validated_data.get(

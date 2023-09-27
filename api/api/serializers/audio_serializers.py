@@ -8,11 +8,10 @@ from api.constants.media_types import AUDIO_TYPE
 from api.models import Audio, AudioReport, AudioSet
 from api.serializers.fields import EnumCharField, SchemableHyperlinkedIdentityField
 from api.serializers.media_serializers import (
-    MediaCollectionRequestSerializer,
-    MediaListRequestSerializer,
     MediaReportRequestSerializer,
     MediaSearchRequestSerializer,
     MediaSerializer,
+    PaginatedRequestSerializer,
     get_hyperlinks_serializer,
     get_search_request_source_serializer,
 )
@@ -26,12 +25,32 @@ from api.serializers.media_serializers import (
 AudioSearchRequestSourceSerializer = get_search_request_source_serializer("audio")
 
 
-class AudioListRequestSerializer(MediaListRequestSerializer):
-    """Parse and validate audio list path and query string parameters."""
+class AudioCollectionRequestSerializer(PaginatedRequestSerializer):
+    field_names = [
+        *PaginatedRequestSerializer.field_names,
+        "peaks",
+    ]
 
-    media_type = AUDIO_TYPE
+    peaks = serializers.BooleanField(
+        help_text="Whether to include the waveform peaks or not",
+        required=False,
+        default=False,
+    )
+
+    @property
+    def needs_db(self) -> bool:
+        return super().needs_db or self.data["peaks"]
+
+
+class AudioSearchRequestSerializer(
+    AudioSearchRequestSourceSerializer,
+    MediaSearchRequestSerializer,
+):
+    """Parse and validate search query string parameters."""
+
     fields_names = [
-        *MediaListRequestSerializer.fields_names,
+        *MediaSearchRequestSerializer.fields_names,
+        *AudioSearchRequestSourceSerializer.field_names,
         "category",
         "length",
     ]
@@ -60,31 +79,12 @@ class AudioListRequestSerializer(MediaListRequestSerializer):
     def needs_db(self) -> bool:
         return super().needs_db or self.data["peaks"]
 
-
-class AudioSearchRequestSerializer(
-    AudioListRequestSerializer,
-    AudioSearchRequestSourceSerializer,
-    MediaSearchRequestSerializer,
-):
-    """Parse and validate search query string parameters."""
-
-    fields_names = [
-        *AudioListRequestSerializer.fields_names,
-        *AudioSearchRequestSourceSerializer.field_names,
-        *MediaSearchRequestSerializer.fields_names,
-    ]
-
-
-class AudioCollectionRequestSerializer(
-    AudioListRequestSerializer,
-    MediaCollectionRequestSerializer,
-):
-    """Parse and validate collection path and query string parameters."""
-
-    fields_names = [
-        *MediaCollectionRequestSerializer.fields_names,
-        *AudioListRequestSerializer.fields_names,
-    ]
+    def validate_internal__index(self, value):
+        if not (index := super().validate_internal__index(value)):
+            return None
+        if not index.startswith(AUDIO_TYPE):
+            raise serializers.ValidationError(f"Invalid index name `{value}`.")
+        return index
 
 
 class AudioReportRequestSerializer(MediaReportRequestSerializer):

@@ -3,18 +3,20 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import APIException, NotFound
 from rest_framework.response import Response
 
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import (
+    OpenApiExample,
+    OpenApiResponse,
+    extend_schema,
+    extend_schema_view,
+)
 
 from api.constants.media_types import AUDIO_TYPE
 from api.docs.audio_docs import (
-    creator_collection,
     detail,
     related,
     report,
     search,
-    source_collection,
     stats,
-    tag_collection,
     thumbnail,
     waveform,
 )
@@ -26,6 +28,7 @@ from api.serializers.audio_serializers import (
     AudioSerializer,
     AudioWaveformSerializer,
 )
+from api.serializers.error_serializers import NotFoundErrorSerializer
 from api.serializers.media_serializers import MediaThumbnailRequestSerializer
 from api.utils.throttle import AnonThumbnailRateThrottle, OAuth2IdThumbnailRateThrottle
 from api.views.media_views import MediaViewSet
@@ -42,18 +45,37 @@ class AudioViewSet(MediaViewSet):
     """Viewset for all endpoints pertaining to audio."""
 
     model_class = Audio
-    search_query_serializer_class = AudioSearchRequestSerializer
-    collection_serializer_class = AudioCollectionRequestSerializer
+    media_type = AUDIO_TYPE
+    query_serializer_class = AudioSearchRequestSerializer
     default_index = settings.MEDIA_INDEX_MAPPING[AUDIO_TYPE]
 
     serializer_class = AudioSerializer
+    collection_serializer_class = AudioCollectionRequestSerializer
 
     def get_queryset(self):
         return super().get_queryset().select_related("mature_audio", "audioset")
 
     # Extra actions
-
-    @creator_collection
+    @extend_schema(
+        operation_id="audio_by_creator",
+        summary="audio_by_creator_at_source",
+        responses={
+            200: AudioSerializer(many=True),
+            404: OpenApiResponse(
+                NotFoundErrorSerializer,
+                examples=[
+                    OpenApiExample(
+                        name="404",
+                        value={
+                            "detail": "Invalid source 'source_name'. "
+                            "Valid sources are ..."
+                        },
+                    )
+                ],
+            ),
+        },
+        parameters=[AudioCollectionRequestSerializer],
+    )
     @action(
         detail=False,
         methods=["get"],
@@ -68,22 +90,46 @@ class AudioViewSet(MediaViewSet):
         """
         return super().creator_collection(request, source, creator)
 
-    @source_collection
+    @extend_schema(
+        operation_id="audio_by_source",
+        summary="audio_by_source",
+        responses={
+            200: AudioSerializer(many=True),
+            404: OpenApiResponse(
+                NotFoundErrorSerializer,
+                examples=[
+                    OpenApiExample(
+                        name="404",
+                        value={
+                            "detail": "Invalid source 'source_name'. "
+                            "Valid sources are ..."
+                        },
+                    )
+                ],
+            ),
+        },
+        parameters=[AudioCollectionRequestSerializer],
+    )
     @action(
         detail=False,
         methods=["get"],
         url_path="source/(?P<source>[^/.]+)",
     )
-    def source_collection(self, *args, **kwargs):
+    def source_collection(self, request, source):
         """
         Get a collection of audio items from a specific source.
 
         The items in the collection will be sorted by the order in which they were
         added to Openverse.
         """
-        return super().creator_collection(*args, **kwargs)
+        return super().source_collection(request, source)
 
-    @tag_collection
+    @extend_schema(
+        operation_id="audio_by_tag",
+        summary="audio_by_tag",
+        responses={200: AudioSerializer(many=True)},
+        parameters=[AudioCollectionRequestSerializer],
+    )
     @action(
         detail=False,
         methods=["get"],

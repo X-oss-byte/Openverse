@@ -1,4 +1,4 @@
-from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 
 from api.docs.base_docs import custom_extend_schema, fields_to_md
 from api.examples import (
@@ -20,7 +20,6 @@ from api.examples import (
     audio_waveform_curl,
 )
 from api.serializers.audio_serializers import (
-    AudioListRequestSerializer,
     AudioReportRequestSerializer,
     AudioSearchRequestSerializer,
     AudioSerializer,
@@ -116,54 +115,4 @@ waveform = custom_extend_schema(
         404: (NotFoundErrorSerializer, audio_waveform_404_example),
     },
     eg=[audio_waveform_curl],
-)
-
-AUDIO_SOURCE_DESCRIPTION = (
-    "The source of the audio. Valid values for `source` are `source_name`s "
-    "from the stats endpoint: https://api.openverse.engineering/v1/audio/stats/"
-)
-collection_responses = {
-    "responses": {200: AudioSerializer(many=True), 404: NotFoundErrorSerializer}
-}
-
-
-def create_collection_parameters(tags: list[dict]):
-    return [
-        AudioListRequestSerializer,
-        *[
-            OpenApiParameter(
-                name=t["name"], type=str, location="path", description=t["description"]
-            )
-            for t in tags
-        ],
-    ]
-
-
-tag_collection = extend_schema(
-    **collection_responses,
-    parameters=create_collection_parameters(
-        [
-            {
-                "name": "tag",
-                "description": "The tag for which audio items are to be retrieved.",
-            }
-        ]
-    ),
-)
-
-source_collection = extend_schema(
-    **collection_responses,
-    parameters=create_collection_parameters(
-        [{"name": "source", "description": AUDIO_SOURCE_DESCRIPTION}]
-    ),
-)
-
-creator_collection = extend_schema(
-    **collection_responses,
-    parameters=create_collection_parameters(
-        [
-            {"name": "creator", "description": "The creator of the audio."},
-            {"name": "source", "description": AUDIO_SOURCE_DESCRIPTION},
-        ]
-    ),
 )
