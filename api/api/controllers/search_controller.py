@@ -274,7 +274,7 @@ def _apply_filter(
 
 
 def get_excluded_providers():
-    """Hide data sources from the catalog dynamically."""
+    """Return the list of data sources to hide from the catalog dynamically."""
 
     filter_cache_key = "filtered_providers"
     filtered_providers = cache.get(key=filter_cache_key)
@@ -364,21 +364,13 @@ def query_media(
     s = s.params(preference=str(ip), request_timeout=7)
 
     # Sort by new for collections or if the parameter is explicitly set
-    if (
-        strategy == "collection"
-        or search_params.validated_data["sort_by"] == INDEXED_ON
-    ):
-        s = s.sort(
-            {
-                "created_on": {
-                    "order": search_params.validated_data.get("sort_dir", "desc")
-                }
-            }
-        )
+    sort_by = search_params.validated_data.get("sort_by")
+    sort_dir = search_params.validated_data.get("sort_dir", "desc")
+    if strategy == "collection" or sort_by == INDEXED_ON:
+        s = s.sort({"created_on": {"order": sort_dir}})
 
-    # Execute paginated search
+    # Execute paginated search and tally results
     page_count, result_count, results = execute_search(s, page, page_size, filter_dead)
-
     tally_results(index, results, page, page_size)
 
     if not results:
