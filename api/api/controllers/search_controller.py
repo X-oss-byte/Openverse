@@ -36,6 +36,8 @@ DEEP_PAGINATION_ERROR = "Deep pagination is not allowed."
 QUERY_SPECIAL_CHARACTER_ERROR = "Unescaped special characters are not allowed."
 DEFAULT_BOOST = 10000
 
+FILTER_TYPE = Literal["filter", "exclude"]
+
 
 class RankFeature(Query):
     name = "rank_feature"
@@ -241,7 +243,7 @@ def _apply_filter(
     search_params: media_serializers.MediaSearchRequestSerializer,
     serializer_field: str,
     es_field: str | None = None,
-    behaviour: Literal["filter", "exclude"] = "filter",
+    behaviour: FILTER_TYPE = "filter",
 ):
     """
     Parse and apply a filter from the search parameters serializer.
@@ -406,27 +408,31 @@ def build_search_query(
     # Apply term filters. Each tuple pairs a filter's parameter name in the API
     # with its corresponding field in Elasticsearch. "None" means that the
     # names are identical.
-    filters = [
-        ("extension", None),
-        ("category", None),
-        ("categories", "category"),
-        ("length", None),
-        ("aspect_ratio", None),
-        ("size", None),
-        ("source", None),
-        ("license", "license__keyword"),
-        ("license_type", "license__keyword"),
-    ]
-    for serializer_field, es_field in filters:
+    filters = {
+        "filter": [
+            ("extension", None),
+            ("category", None),
+            ("categories", "category"),
+            ("length", None),
+            ("aspect_ratio", None),
+            ("size", None),
+            ("source", None),
+            ("license", "license__keyword"),
+            ("license_type", "license__keyword"),
+        ],
+        "exclude": [
+            ("exclude_source", "source"),
+        ],
+    }
+    for behavior, [serializer_field, es_field] in filters.items():
         if serializer_field in search_params.data:
-            s = _apply_filter(s, search_params, serializer_field, es_field)
-
-    exclude = [
-        ("excluded_source", "source"),
-    ]
-    for serializer_field, es_field in exclude:
-        if serializer_field in search_params.data:
-            s = _apply_filter(s, search_params, serializer_field, es_field, "exclude")
+            s = _apply_filter(
+                s,
+                search_params,
+                serializer_field,
+                es_field,
+                cast(behavior, FILTER_TYPE),
+            )
 
     # Exclude mature content and disabled sources
     s = _exclude_sensitive_by_param(s, search_params)
