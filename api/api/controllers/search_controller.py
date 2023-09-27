@@ -293,7 +293,7 @@ def _exclude_sensitive_by_param(s: Search, search_params):
 
 
 def _resolve_index(
-    index: Literal["image", "audio"],
+    index: OriginIndex,
     include_sensitive_results: bool,
 ) -> SearchIndex:
     use_filtered_index = all(
