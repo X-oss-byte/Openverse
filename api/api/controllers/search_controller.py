@@ -516,18 +516,14 @@ def build_collection_query(
     search_query = {"filter": [], "must": [], "should": [], "must_not": []}
     # Apply the term filters. Each tuple pairs a filter's parameter name in the API
     # with its corresponding field in Elasticsearch. "None" means that the
-    # names are identical. The `allow_multiple` flag indicates whether the
-    # filter accepts multiple comma-separated values.
+    # names are identical.
     filters = [
-        # Collection filters allow a single value.
         ("tag", "tags.name.keyword"),
         ("source", "source.keyword"),
         ("creator", "creator.keyword"),
     ]
     for serializer_field, es_field in filters:
-        if serializer_field in collection_params:
-            if not (argument := collection_params.get(serializer_field)):
-                continue
+        if argument := collection_params.get(serializer_field):
             parameter = es_field or serializer_field
             search_query["filter"].append({"term": {parameter: argument}})
 
