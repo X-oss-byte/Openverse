@@ -36,7 +36,9 @@ class PaginatedRequestSerializer(serializers.Serializer):
     page_size = serializers.IntegerField(
         label="page_size",
         help_text=f"Number of results to return per page. "
-        f"Maximum for unauthenticated requests is {settings.MAX_ANONYMOUS_PAGE_SIZE}.",
+        f"Maximum is {settings.MAX_AUTHED_PAGE_SIZE} for authenticated "
+        f"requests, and {settings.MAX_ANONYMOUS_PAGE_SIZE} for "
+        f"unauthenticated requests.",
         required=False,
         default=settings.MAX_ANONYMOUS_PAGE_SIZE,
         min_value=1,
