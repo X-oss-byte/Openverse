@@ -461,6 +461,7 @@ def test_search_tallies_pages_less_than_5(
     search_controller.query_media(
         strategy="search",
         search_params=serializer,
+        collection_params=None,
         ip=0,
         origin_index=cast(OriginIndex, media_type_config.origin_index),
         exact_index=False,
@@ -501,6 +502,7 @@ def test_search_tallies_handles_empty_page(
     search_controller.query_media(
         strategy="search",
         search_params=serializer,
+        collection_params=None,
         ip=0,
         origin_index=cast(OriginIndex, media_type_config.origin_index),
         exact_index=False,
@@ -545,6 +547,7 @@ def test_resolves_index(
     search_controller.query_media(
         strategy="search",
         search_params=serializer,
+        collection_params=None,
         ip=0,
         origin_index=cast(OriginIndex, origin_index),
         exact_index=False,
@@ -613,6 +616,7 @@ def test_no_post_process_results_recursion(
     results, _, _, _ = search_controller.query_media(
         strategy="search",
         search_params=serializer,
+        collection_params=None,
         ip=0,
         origin_index=image_media_type_config.origin_index,
         exact_index=True,
@@ -752,6 +756,7 @@ def test_post_process_results_recurses_as_needed(
     results, _, _, _ = search_controller.query_media(
         strategy="search",
         search_params=serializer,
+        collection_params=None,
         ip=0,
         origin_index=image_media_type_config.origin_index,
         exact_index=True,
