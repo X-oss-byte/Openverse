@@ -1,5 +1,5 @@
 import logging
-from typing import Literal
+from typing import Literal, Union
 
 from rest_framework import status
 from rest_framework.decorators import action
@@ -11,11 +11,7 @@ from api.constants.search import ListView
 from api.controllers import search_controller
 from api.models import ContentProvider
 from api.models.media import AbstractMedia
-from api.serializers.audio_serializers import AudioCollectionRequestSerializer
-from api.serializers.media_serializers import (
-    MediaSearchRequestSerializer,
-    PaginatedRequestSerializer,
-)
+from api.serializers import audio_serializers, media_serializers
 from api.serializers.provider_serializers import ProviderSerializer
 from api.utils import image_proxy
 from api.utils.pagination import StandardPagination
@@ -24,9 +20,15 @@ from api.utils.search_context import SearchContext
 
 logger = logging.getLogger(__name__)
 
+MediaListRequestSerializer = Union[
+    audio_serializers.AudioCollectionRequestSerializer,
+    media_serializers.PaginatedRequestSerializer,
+    media_serializers.MediaSearchRequestSerializer,
+]
+
 
 class InvalidSource(APIException):
-    status_code = 404
+    status_code = 400
     default_detail = "Invalid source."
     default_code = "invalid_source"
 
@@ -44,7 +46,7 @@ class MediaViewSet(ReadOnlyModelViewSet):
     model_class: type[AbstractMedia] = None
     media_type: Literal["image", "audio"] | None = None
     query_serializer_class = None
-    collection_serializer_class = PaginatedRequestSerializer
+    collection_serializer_class = None
     default_index = None
 
     def __init__(self, *args, **kwargs):
@@ -145,7 +147,8 @@ class MediaViewSet(ReadOnlyModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="tag/(?P<tag>[^/.]+)")
     def tag_collection(self, request, tag, *_, **__):
-        return self.collection(request, tag, None, None)
+        tag_lower = tag.lower()
+        return self.collection(request, tag_lower, None, None)
 
     @action(detail=False, methods=["get"], url_path="source/(?P<source>[^/.]+)")
     def source_collection(self, request, source, *_, **__):
@@ -165,9 +168,7 @@ class MediaViewSet(ReadOnlyModelViewSet):
         self,
         request,
         strategy: ListView,
-        params: MediaSearchRequestSerializer
-        | PaginatedRequestSerializer
-        | AudioCollectionRequestSerializer,
+        params: MediaListRequestSerializer,
         collection_params: dict[str, str] | None = None,
     ):
         page_size = self.paginator.page_size = params.data["page_size"]

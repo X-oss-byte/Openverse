@@ -4,7 +4,7 @@ import logging as log
 import pprint
 from itertools import accumulate
 from math import ceil
-from typing import Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 from django.conf import settings
 from django.core.cache import cache
@@ -18,12 +18,18 @@ import api.models as models
 from api.constants.media_types import OriginIndex, SearchIndex
 from api.constants.search import ListView
 from api.constants.sorting import INDEXED_ON
-from api.serializers import audio_serializers, media_serializers
 from api.utils import tallies
 from api.utils.check_dead_links import check_dead_links
 from api.utils.dead_link_mask import get_query_hash, get_query_mask
 from api.utils.search_context import SearchContext
 
+
+if TYPE_CHECKING:
+    from api.serializers.audio_serializers import AudioCollectionRequestSerializer
+    from api.serializers.media_serializers import (
+        MediaSearchRequestSerializer,
+        PaginatedRequestSerializer,
+    )
 
 ELASTICSEARCH_MAX_RESULT_WINDOW = 10000
 SOURCE_CACHE_TIMEOUT = 60 * 60 * 4  # 4 hours
@@ -37,6 +43,12 @@ QUERY_SPECIAL_CHARACTER_ERROR = "Unescaped special characters are not allowed."
 DEFAULT_BOOST = 10000
 
 FILTER_TYPE = Literal["filter", "exclude"]
+if TYPE_CHECKING:
+    MediaListRequestSerializer = (
+        AudioCollectionRequestSerializer
+        | MediaSearchRequestSerializer
+        | PaginatedRequestSerializer
+    )
 
 
 class RankFeature(Query):
@@ -240,7 +252,7 @@ def _post_process_results(
 
 def _apply_filter(
     s: Search,
-    search_params: media_serializers.MediaSearchRequestSerializer,
+    search_params: MediaSearchRequestSerializer,
     serializer_field: str,
     es_field: str | None = None,
     behaviour: FILTER_TYPE = "filter",
@@ -312,9 +324,7 @@ def _resolve_index(
 
 def query_media(
     strategy: ListView,
-    search_params: media_serializers.MediaSearchRequestSerializer
-    | media_serializers.PaginatedRequestSerializer
-    | audio_serializers.AudioCollectionRequestSerializer,
+    search_params: MediaListRequestSerializer,
     collection_params: dict[str, str] | None,
     origin_index: OriginIndex,
     exact_index: bool,
@@ -356,7 +366,7 @@ def query_media(
     search_client = Search(index=index)
 
     if strategy == "collection":
-        s = build_collection_query(search_client, search_params, collection_params)
+        s = build_collection_query(search_client, collection_params)
     else:
         s = build_search_query(search_client, search_params)
     # Route users to the same Elasticsearch worker node to reduce
@@ -383,7 +393,7 @@ def query_media(
 
 
 def build_search_query(
-    search_client: Search, search_params: media_serializers.MediaSearchRequestSerializer
+    search_client: Search, search_params: MediaSearchRequestSerializer
 ):
     """
     Build the default search query for the given search parameters.
@@ -494,7 +504,6 @@ def build_search_query(
 
 def build_collection_query(
     s: Search,
-    search_params: media_serializers.PaginatedRequestSerializer,
     collection_params: dict[str, str],
 ):
     """
@@ -502,7 +511,6 @@ def build_collection_query(
     The common filters, e.g. license or category, are also applied.
     :param collection_params: `tag`, `source` and/or `creator` values from the path.
     :param s: the search client to build the query for.
-    :param search_params: the validated search parameters.
     :return: the search client with the query applied.
     """
     search_query = {"filter": [], "must": [], "should": [], "must_not": []}
@@ -519,17 +527,14 @@ def build_collection_query(
             parameter = es_field or serializer_field
             search_query["filter"].append({"term": {parameter: argument}})
 
-    # Exclude mature content and disabled sources
-    include_sensitive_results = search_params.validated_data.get(
-        "include_sensitive_results", False
-    )
-    if not include_sensitive_results:
-        search_query["must_not"].append({"term": {"mature": True}})
+    # Exclude mature content and disabled sources.
+    # TODO: add fetching `sensitive` results based on a query parameter
+    search_query["must_not"].append({"term": {"mature": True}})
     if excluded_providers := get_excluded_providers():
         search_query["must_not"].append({"terms": {"provider": excluded_providers}})
 
     # Rank the `tag` results by popularity and authority
-    if "tag" in search_params.data:
+    if "tag" in collection_params:
         feature_boost = {
             "standardized_popularity": DEFAULT_BOOST,
             "authority_boost": DEFAULT_BOOST,
@@ -584,12 +589,14 @@ def execute_search(s, page, page_size, filter_dead):
     """
     start, end = _get_query_slice(s, page_size, page, filter_dead)
     s = s[start:end]
+    settings.VERBOSE_ES_RESPONSE = True
     try:
         if settings.VERBOSE_ES_RESPONSE:
             log.info(pprint.pprint(s.to_dict()))
 
         search_response = s.execute()
 
+        settings.VERBOSE_ES_RESPONSE = False
         if settings.VERBOSE_ES_RESPONSE:
             log.info(pprint.pprint(search_response.to_dict()))
     except (RequestError, NotFoundError) as e:
