@@ -410,31 +410,27 @@ def build_search_query(
     # Apply term filters. Each tuple pairs a filter's parameter name in the API
     # with its corresponding field in Elasticsearch. "None" means that the
     # names are identical.
-    filters = {
-        "filter": [
-            ("extension", None),
-            ("category", None),
-            ("categories", "category"),
-            ("length", None),
-            ("aspect_ratio", None),
-            ("size", None),
-            ("source", None),
-            ("license", "license__keyword"),
-            ("license_type", "license__keyword"),
-        ],
-        "exclude": [
-            ("exclude_source", "source"),
-        ],
-    }
-    for behavior, [serializer_field, es_field] in filters.items():
+    filters = [
+        ("extension", None),
+        ("category", None),
+        ("categories", "category"),
+        ("length", None),
+        ("aspect_ratio", None),
+        ("size", None),
+        ("source", None),
+        ("license", "license__keyword"),
+        ("license_type", "license__keyword"),
+    ]
+    for serializer_field, es_field in filters:
         if serializer_field in search_params.data:
-            s = _apply_filter(
-                s,
-                search_params,
-                serializer_field,
-                es_field,
-                cast(behavior, FILTER_TYPE),
-            )
+            s = _apply_filter(s, search_params, serializer_field, es_field)
+
+    exclude = [
+        ("excluded_source", "source"),
+    ]
+    for serializer_field, es_field in exclude:
+        if serializer_field in search_params.data:
+            s = _apply_filter(s, search_params, serializer_field, es_field, "exclude")
 
     # Exclude mature content and disabled sources
     s = _exclude_sensitive_by_param(s, search_params)
