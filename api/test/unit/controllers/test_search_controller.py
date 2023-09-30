@@ -19,7 +19,6 @@ from elasticsearch_dsl import Q, Search
 from api.constants.media_types import OriginIndex
 from api.controllers import search_controller
 from api.controllers.search_controller import build_collection_query
-from api.serializers import image_serializers
 from api.utils import tallies
 from api.utils.dead_link_mask import get_query_hash, save_query_mask
 from api.utils.search_context import SearchContext
@@ -782,74 +781,50 @@ DEFAULT_RANK_QUERY = [
 
 
 @pytest.mark.parametrize(
-    ("data", "expected_query"),
+    ("data", "expected_query_filter", "expected_should"),
     [
         pytest.param(
-            {"unstable__include_sensitive_results": True, "tag": "art"},
-            Q(
-                "bool",
-                filter=[{"terms": {"tags.name.keyword": ["art"]}}],
-                should=DEFAULT_RANK_QUERY,
-            ),
-            id="filter_by_tag_with_sensitive_bool",
-        ),
-        pytest.param(
             {"tag": "art"},
-            Q(
-                "bool",
-                filter=[{"terms": {"tags.name.keyword": ["art"]}}],
-                must_not=[{"term": {"mature": True}}],
-                should=DEFAULT_RANK_QUERY,
-            ),
+            [{"term": {"tags.name.keyword": "art"}}],
+            DEFAULT_RANK_QUERY,
             id="filter_by_tag",
         ),
         pytest.param(
-            {"tag": "art", "license": "cc0,by", "category": "photograph"},
-            Q(
-                "bool",
-                filter=[
-                    {"terms": {"tags.name.keyword": ["art"]}},
-                    {"terms": {"license.keyword": ["cc0", "by"]}},
-                    {"terms": {"category": ["photograph"]}},
-                ],
-                should=DEFAULT_RANK_QUERY,
-                must_not=[{"term": {"mature": True}}],
-            ),
-            id="filter_by_tag_with_other_filters",
+            {"tag": "art, photography"},
+            [{"term": {"tags.name.keyword": "art, photography"}}],
+            DEFAULT_RANK_QUERY,
+            id="filter_by_tag_treats_punctuation_as_part_of_tag",
         ),
         pytest.param(
             {"source": "flickr"},
-            Q(
-                "bool",
-                filter=[{"terms": {"source.keyword": ["flickr"]}}],
-                must_not=[{"term": {"mature": True}}],
-            ),
+            [{"term": {"source.keyword": "flickr"}}],
+            [],
             id="filter_by_source",
         ),
         pytest.param(
-            {
-                "source": "flickr",
-                "creator": "nasa",
-            },
-            Q(
-                "bool",
-                filter=[
-                    {"terms": {"source.keyword": ["flickr"]}},
-                    {"terms": {"creator.keyword": ["nasa"]}},
-                ],
-                must_not=[{"term": {"mature": True}}],
-            ),
+            {"source": "flickr", "creator": "nasa"},
+            [
+                {"term": {"source.keyword": "flickr"}},
+                {"term": {"creator.keyword": "nasa"}},
+            ],
+            [],
             id="filter_by_creator",
         ),
     ],
 )
 @mock.patch("api.controllers.search_controller.Search", wraps=Search)
-def test_build_collection_query(mock_search_class, data, expected_query):
+def test_build_collection_query(
+    mock_search_class, data, expected_query_filter, expected_should
+):
+    expected_query = Q(
+        "bool",
+        filter=expected_query_filter,
+        must_not=[{"term": {"mature": True}}],
+        should=expected_should,
+    )
     mock_search = mock_search_class.return_value
-    search_params = image_serializers.ImageCollectionRequestSerializer(data=data)
-    search_params.is_valid()
 
-    build_collection_query(mock_search, search_params)
+    build_collection_query(mock_search, data)
     actual_query = mock_search.query.call_args[0][0]
 
     assert actual_query == expected_query
