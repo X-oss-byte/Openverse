@@ -66,12 +66,11 @@ def test_collection_parameters(path, expected_params, api_client):
     ) as mock_get_media_results:
         api_client.get(f"/v1/images/{path}")
 
-    actual_params = mock_get_media_results.call_args[0][2].data
+    actual_params = mock_get_media_results.call_args[0][3]
     request_kind = mock_get_media_results.call_args[0][1]
 
     assert mock_get_media_results.called
-    for key, value in expected_params.items():
-        assert actual_params[key] == value
+    assert actual_params == expected_params
     assert request_kind == "collection"
 
 
