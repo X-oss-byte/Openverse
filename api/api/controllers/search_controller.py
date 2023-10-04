@@ -536,7 +536,9 @@ def build_collection_query(
     return s
 
 
-def tally_results(index, results, page, page_size):
+def tally_results(
+    index: SearchIndex, results: list[Hit] | None, page: int, page_size: int
+) -> None:
     """
     Tally the number of the results from each provider in the results
     for the search query.
