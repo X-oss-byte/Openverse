@@ -355,13 +355,7 @@ def query_media(
     :return: Tuple with a List of Hits from elasticsearch, the total count of
     pages, the number of results, and the ``SearchContext`` as a dict.
     """
-    if not exact_index:
-        index = _resolve_index(
-            origin_index,
-            search_params.validated_data.get("include_sensitive_results", False),
-        )
-    else:
-        index = origin_index
+    index = get_index(exact_index, origin_index, search_params)
 
     search_client = Search(index=index)
 
@@ -369,27 +363,40 @@ def query_media(
         s = build_collection_query(search_client, collection_params)
     else:
         s = build_search_query(search_client, search_params)
+
     # Route users to the same Elasticsearch worker node to reduce
     # pagination inconsistencies and increase cache hits.
     s = s.params(preference=str(ip), request_timeout=7)
 
-    # Sort by new for collections or if the parameter is explicitly set
+    # Sort by `created_on` if the parameter is set or if `strategy` is `collection`.
     sort_by = search_params.validated_data.get("sort_by")
     sort_dir = search_params.validated_data.get("sort_dir", "desc")
     if strategy == "collection" or sort_by == INDEXED_ON:
         s = s.sort({"created_on": {"order": sort_dir}})
 
     # Execute paginated search and tally results
-    page_count, result_count, results = execute_search(s, page, page_size, filter_dead)
-    tally_results(index, results, page, page_size)
-
-    if not results:
-        results = []
+    page_count, result_count, results = execute_search(
+        s, page, page_size, filter_dead, index
+    )
 
     result_ids = [result.identifier for result in results]
     search_context = SearchContext.build(result_ids, origin_index)
 
     return results, page_count, result_count, search_context.asdict()
+
+
+def get_index(
+    exact_index: bool,
+    origin_index: OriginIndex,
+    search_params: MediaListRequestSerializer,
+) -> SearchIndex:
+    include_sensitive_results = search_params.validated_data.get(
+        "include_sensitive_results", False
+    )
+    if exact_index:
+        return origin_index
+    else:
+        return _resolve_index(origin_index, include_sensitive_results)
 
 
 def build_search_query(
@@ -577,7 +584,9 @@ def tally_results(index, results, page, page_size):
         tallies.count_provider_occurrences(results_to_tally, index)
 
 
-def execute_search(s, page, page_size, filter_dead):
+def execute_search(
+    s: Search, page: int, page_size: int, filter_dead: bool, index: SearchIndex
+) -> tuple[int, int, list[Hit]]:
     """
     Execute search for the given query slice, post-processes the results,
     and returns the results and result and page counts.
@@ -594,12 +603,14 @@ def execute_search(s, page, page_size, filter_dead):
             log.info(pprint.pprint(search_response.to_dict()))
     except (RequestError, NotFoundError) as e:
         raise ValueError(e)
-    results = _post_process_results(
-        s, start, end, page_size, search_response, filter_dead
+    results: list[Hit] = (
+        _post_process_results(s, start, end, page_size, search_response, filter_dead)
+        or []
     )
     result_count, page_count = _get_result_and_page_count(
         search_response, results, page_size, page
     )
+    tally_results(index, results, page, page_size)
     return page_count, result_count, results
 
 
