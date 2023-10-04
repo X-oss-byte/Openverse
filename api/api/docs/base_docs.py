@@ -10,6 +10,7 @@ from drf_spectacular.utils import (
     extend_schema,
 )
 
+from api.constants.media_types import MediaType
 from api.serializers.audio_serializers import (
     AudioCollectionRequestSerializer,
     AudioSerializer,
@@ -111,7 +112,7 @@ source_404_response = OpenApiResponse(
 )
 
 
-def build_source_path_parameter(media_type: Literal["images", "audio"]):
+def build_source_path_parameter(media_type: MediaType):
     valid_description = (
         f"Valid values are source_names from the stats endpoint: "
         f"https://api.openverse.engineering/v1/{media_type}/stats/."

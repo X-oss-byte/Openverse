@@ -1,5 +1,5 @@
 import logging
-from typing import Literal, Union
+from typing import Union
 
 from rest_framework import status
 from rest_framework.decorators import action
@@ -7,6 +7,7 @@ from rest_framework.exceptions import APIException
 from rest_framework.response import Response
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
+from api.constants.media_types import MediaType
 from api.constants.search import ListView
 from api.controllers import search_controller
 from api.models import ContentProvider
@@ -44,7 +45,7 @@ class MediaViewSet(ReadOnlyModelViewSet):
 
     # Populate these in the corresponding subclass
     model_class: type[AbstractMedia] = None
-    media_type: Literal["image", "audio"] | None = None
+    media_type: MediaType | None = None
     query_serializer_class = None
     collection_serializer_class = None
     default_index = None
