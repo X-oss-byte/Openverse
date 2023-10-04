@@ -306,22 +306,6 @@ def _exclude_sensitive_by_param(s: Search, search_params):
     return s
 
 
-def _resolve_index(
-    index: OriginIndex,
-    include_sensitive_results: bool,
-) -> SearchIndex:
-    use_filtered_index = all(
-        (
-            settings.ENABLE_FILTERED_INDEX_QUERIES,
-            not include_sensitive_results,
-        )
-    )
-    if use_filtered_index:
-        return cast(SearchIndex, f"{index}-filtered")
-
-    return index
-
-
 def query_media(
     strategy: SearchStrategy,
     search_params: MediaListRequestSerializer,
@@ -390,13 +374,15 @@ def get_index(
     origin_index: OriginIndex,
     search_params: MediaListRequestSerializer,
 ) -> SearchIndex:
+    if exact_index:
+        return origin_index
+
     include_sensitive_results = search_params.validated_data.get(
         "include_sensitive_results", False
     )
-    if exact_index:
-        return origin_index
-    else:
-        return _resolve_index(origin_index, include_sensitive_results)
+    if settings.ENABLE_FILTERED_INDEX_QUERIES and not include_sensitive_results:
+        return cast(SearchIndex, f"{origin_index}-filtered")
+    return origin_index
 
 
 def build_search_query(
