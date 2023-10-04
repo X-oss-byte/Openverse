@@ -1,5 +1,5 @@
 from typing import Literal
 
 
-LIST_VIEWS = ["search", "collection"]
-ListView = Literal["search", "collection"]
+SEARCH_STRATEGIES = ["search", "collection"]
+SearchStrategy = Literal["search", "collection"]

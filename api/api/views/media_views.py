@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from api.constants.media_types import MediaType
-from api.constants.search import ListView
+from api.constants.search import SearchStrategy
 from api.controllers import search_controller
 from api.models import ContentProvider
 from api.models.media import AbstractMedia
@@ -168,7 +168,7 @@ class MediaViewSet(ReadOnlyModelViewSet):
     def get_media_results(
         self,
         request,
-        strategy: ListView,
+        strategy: SearchStrategy,
         params: MediaListRequestSerializer,
         collection_params: dict[str, str] | None = None,
     ):
