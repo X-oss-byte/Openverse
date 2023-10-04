@@ -503,8 +503,7 @@ def build_collection_query(
     collection_params: dict[str, str],
 ):
     """
-    Build the query to retrieve all the items in a collection.
-    The common filters, e.g. license or category, are also applied.
+    Build the query to retrieve items in a collection.
     :param collection_params: `tag`, `source` and/or `creator` values from the path.
     :param s: the search client to build the query for.
     :return: the search client with the query applied.
@@ -585,14 +584,12 @@ def execute_search(s, page, page_size, filter_dead):
     """
     start, end = _get_query_slice(s, page_size, page, filter_dead)
     s = s[start:end]
-    settings.VERBOSE_ES_RESPONSE = True
     try:
         if settings.VERBOSE_ES_RESPONSE:
             log.info(pprint.pprint(s.to_dict()))
 
         search_response = s.execute()
 
-        settings.VERBOSE_ES_RESPONSE = False
         if settings.VERBOSE_ES_RESPONSE:
             log.info(pprint.pprint(search_response.to_dict()))
     except (RequestError, NotFoundError) as e:
