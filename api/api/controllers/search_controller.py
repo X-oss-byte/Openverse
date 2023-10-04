@@ -320,14 +320,15 @@ def query_media(
     """
     If ``strategy`` is ``search``, perform a ranked paginated search
     from the set of keywords and, optionally, filters.
-    If ``strategy`` is ``collection``, perform a paginated search
+    If `strategy` is `collection`, perform a paginated search
     for the `tag`, `source` or `source` and `creator` combination.
 
     :param collection_params: The path parameters for collection search, if
-    strategy is ``collection``.
+    strategy is `collection`.
     :param strategy: Whether to perform a default search or retrieve a collection.
-    :param search_params: Search parameters. See
-     :class: `ImageSearchQueryStringSerializer`.
+    :param search_params: If `strategy` is `collection`, `PaginatedRequestSerializer`
+    or `AudioCollectionRequestSerializer`. If `strategy` is `search`, search
+    query params, see :class: `MediaRequestSerializer`.
     :param origin_index: The Elasticsearch index to search (e.g. 'image')
     :param exact_index: whether to skip all modifications to the index name
     :param page_size: The number of results to return per page.
@@ -336,7 +337,7 @@ def query_media(
     Elasticsearch shards.
     :param filter_dead: Whether dead links should be removed.
     :param page: The results page number.
-    :return: Tuple with a List of Hits from elasticsearch, the total count of
+    :return: Tuple with a list of Hits from elasticsearch, the total count of
     pages, the number of results, and the ``SearchContext`` as a dict.
     """
     index = get_index(exact_index, origin_index, search_params)
