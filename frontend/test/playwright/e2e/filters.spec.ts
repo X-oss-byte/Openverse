@@ -63,9 +63,7 @@ breakpoints.describeMobileAndDesktop(() => {
   }
 
   test("initial filters are applied based on the url", async ({ page }) => {
-    await page.goto(
-      "/search/?q=cat&license_type=commercial&license=cc0&searchBy=creator"
-    )
+    await page.goto("/search/?q=cat&license_type=commercial&license=cc0")
     await filters.open(page)
     // Creator filter was removed from the UI
     const expectedFilters = ["Zero", "Use commercially"]
@@ -78,9 +76,7 @@ breakpoints.describeMobileAndDesktop(() => {
   test("common filters are retained when media type changes from all media to single type", async ({
     page,
   }) => {
-    await page.goto(
-      "/search/?q=cat&license_type=commercial&license=cc0&searchBy=creator"
-    )
+    await page.goto("/search/?q=cat&license_type=commercial&license=cc0")
     await filters.open(page)
     // Creator filter was removed from the UI
     const expectedFilters = ["Zero", "Use commercially"]
@@ -91,7 +87,7 @@ breakpoints.describeMobileAndDesktop(() => {
     await changeSearchType(page, IMAGE)
 
     await expect(page).toHaveURL(
-      "/search/image?q=cat&license_type=commercial&license=cc0&searchBy=creator"
+      "/search/image?q=cat&license_type=commercial&license=cc0"
     )
     await filters.open(page)
     for (const checkbox of expectedFilters) {
@@ -102,9 +98,7 @@ breakpoints.describeMobileAndDesktop(() => {
   test("common filters are retained when media type changes from single type to all media", async ({
     page,
   }) => {
-    await page.goto(
-      "/search/image?q=cat&license_type=commercial&license=cc0&searchBy=creator"
-    )
+    await page.goto("/search/image?q=cat&license_type=commercial&license=cc0")
     await filters.open(page)
 
     // Creator filter was removed from the UI
@@ -118,7 +112,7 @@ breakpoints.describeMobileAndDesktop(() => {
     await expect(page.locator('input[type="checkbox"]:checked')).toHaveCount(2)
 
     await expect(page).toHaveURL(
-      "/search/?q=cat&license_type=commercial&license=cc0&searchBy=creator"
+      "/search/?q=cat&license_type=commercial&license=cc0"
     )
   })
 
