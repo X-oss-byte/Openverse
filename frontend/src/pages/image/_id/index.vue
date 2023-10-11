@@ -81,7 +81,7 @@
                   :href="image.creator_url"
                   :send-external-link-click-event="false"
                   @click="sendVisitCreatorLinkEvent"
-                >{{ image.creator }}</VLink
+                  >{{ image.creator }}</VLink
                 >
                 <span v-else>{{ image.creator }}</span>
               </template>
