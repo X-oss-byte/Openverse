@@ -560,7 +560,7 @@ jobs:
             })
             console.log('Deleted comment with ID ${{ steps.test-results-comment.outputs.comment-id }}')
 
-      - uses: peter-evans/create-or-update-comment@v2
+      - uses: peter-evans/create-or-update-comment@v3
         if: needs.playwright.result == 'failure'
         with:
           issue-number: ${{ github.event.pull_request.number }}
@@ -659,7 +659,7 @@ jobs:
           issue-number: ${{ github.event.pull_request.number }}
           body-includes: Full-stack documentation
 
-      - uses: peter-evans/create-or-update-comment@v2
+      - uses: peter-evans/create-or-update-comment@v3
         if: github.event_name == 'pull_request'
         with:
           issue-number: ${{ github.event.pull_request.number }}
