@@ -36,7 +36,7 @@ jobs:
       changes: ${{ steps.paths-filter.outputs.changes }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Get changes
         id: paths-filter
@@ -123,7 +123,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup CI env
         uses: ./.github/actions/setup-env
@@ -154,7 +154,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Add API stack label
         uses: actions-ecosystem/action-add-labels@v1
@@ -188,7 +188,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       # ℹ️Step only applies for frontend image.
       - name: Setup CI env
@@ -254,7 +254,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup CI env
         uses: ./.github/actions/setup-env
@@ -299,7 +299,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup CI env
         uses: ./.github/actions/setup-env
@@ -351,7 +351,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup CI env
         uses: ./.github/actions/setup-env
@@ -412,7 +412,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup CI env
         uses: ./.github/actions/setup-env
@@ -434,7 +434,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup CI env
         uses: ./.github/actions/setup-env
@@ -456,7 +456,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup CI env
         uses: ./.github/actions/setup-env
@@ -493,7 +493,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup CI env
         uses: ./.github/actions/setup-env
@@ -606,7 +606,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup CI env
         uses: ./.github/actions/setup-env
@@ -627,7 +627,7 @@ jobs:
           mkdir openverse
 
       - name: Checkout repository at `gh-pages` branch
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: gh-pages
 
@@ -673,7 +673,7 @@ jobs:
             You can check [the GitHub pages deployment action list](https://github.com/${{ github.repository }}/actions/workflows/pages/pages-build-deployment) to see the current status of the deployments.
 
       - name: Checkout repository # again, to enable cleaning
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         if: success() || failure()
 
   #################
@@ -752,7 +752,7 @@ jobs:
       - publish-images
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Dispatch workflow
         run: |
@@ -777,7 +777,7 @@ jobs:
       - publish-images
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Dispatch workflow
         run: |
