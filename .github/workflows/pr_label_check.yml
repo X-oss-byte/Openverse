@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check aspect label
-        uses: docker://agilepathway/pull-request-label-checker:v1.2.13
+        uses: docker://agilepathway/pull-request-label-checker:v1.6.13
         with:
           one_of: "💻 aspect: code,📄 aspect: text,🤖 aspect: dx,🕹 aspect: interface,♿️ aspect: a11y"
           repo_token: ${{ secrets.GITHUB_TOKEN }}
@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check goal label
-        uses: docker://agilepathway/pull-request-label-checker:v1.2.13
+        uses: docker://agilepathway/pull-request-label-checker:v1.6.13
         with:
           one_of: "🌟 goal: addition,🛠 goal: fix,✨ goal: improvement,🧰 goal: internal improvement"
           repo_token: ${{ secrets.GITHUB_TOKEN }}
@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check priority label
-        uses: docker://agilepathway/pull-request-label-checker:v1.2.13
+        uses: docker://agilepathway/pull-request-label-checker:v1.6.13
         with:
           one_of: "🟩 priority: low,🟨 priority: medium,🟧 priority: high,🟥 priority: critical"
           repo_token: ${{ secrets.GITHUB_TOKEN }}
@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check stack label
-        uses: docker://agilepathway/pull-request-label-checker:v1.2.13
+        uses: docker://agilepathway/pull-request-label-checker:v1.6.13
         with:
           any_of: "🧱 stack: backend,🧱 stack: frontend,🧱 stack: mgmt,🧱 stack: api,🧱 stack: catalog,🧱 stack: ingestion server"
           repo_token: ${{ secrets.GITHUB_TOKEN }}
