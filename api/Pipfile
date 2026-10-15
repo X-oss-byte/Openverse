@@ -20,7 +20,7 @@ freezegun = "~=1.2.2"
 [packages]
 aws-requests-auth = "~=0.4"
 boto3 = "~=1.26"
-deepdiff = "~=6.2"
+deepdiff = "~=9.1"
 Django = "~=4.1"
 django-braces = "~=1.15"
 django-cors-headers = "~=3.14"
